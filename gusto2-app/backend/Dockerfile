@@ -18,5 +18,8 @@ ENV PYTHONUNBUFFERED=1
 
 EXPOSE 8000
 
+# Add a stop signal to make the container stop faster
+STOPSIGNAL SIGINT
+
 # Start application using UV
 CMD ["sh", "-c", "uv run uvicorn gusto2.main:app --host 0.0.0.0 --port 8000 --reload"]
