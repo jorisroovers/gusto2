@@ -25,7 +25,7 @@ export default {
   methods: {
     async fetchMessage() {
       try {
-        const response = await axios.get('http://localhost:8000/api/hello');
+        const response = await axios.get('/api/hello');
         this.message = response.data.message;
       } catch (error) {
         console.error('Error fetching message:', error);
