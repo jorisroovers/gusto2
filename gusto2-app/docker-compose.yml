@@ -7,6 +7,8 @@ services:
     restart: always
     networks:
       - gusto2-network
+    volumes:
+      - ./backend:/app
 
   gusto2-frontend:
     build: ./frontend
