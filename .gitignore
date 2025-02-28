@@ -1,0 +1,16 @@
+# Python
+*.pyc
+__pycache__/
+
+# Node
+node_modules/
+
+# Docker
+*.log
+docker-compose.override.yml
+
+# macOS
+.DS_Store
+
+# General
+.env
