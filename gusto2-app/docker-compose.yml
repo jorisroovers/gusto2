@@ -1,0 +1,23 @@
+services:
+  gusto2-backend:
+    build: ./backend
+    container_name: gusto2-backend
+    ports:
+      - "8000:8000"
+    restart: always
+    networks:
+      - gusto2-network
+
+  gusto2-frontend:
+    build: ./frontend
+    container_name: gusto2-frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      - gusto2-backend
+    networks:
+      - gusto2-network
+
+networks:
+  gusto2-network:
+    driver: bridge
