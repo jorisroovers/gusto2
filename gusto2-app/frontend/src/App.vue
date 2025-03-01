@@ -19,7 +19,7 @@ export default {
   name: 'App',
   data() {
     return {
-      message: 'Click the button to get the first meal from the backend'
+      message: 'Click the button to get a meal from the backend'
     };
   },
   methods: {

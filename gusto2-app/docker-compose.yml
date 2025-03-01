@@ -9,18 +9,29 @@ services:
       - gusto2-network
     volumes:
       - ./backend:/app
-      - ./data:/app/data
+      - ${DATA_VOLUME:-./data}:/app/data
 
   gusto2-frontend:
-    build: ./frontend
+    build: 
+      context: ./frontend
+      dockerfile: Dockerfile.dev
     container_name: gusto2-frontend
     ports:
-      - "8080:80"
+      - "8080:8080"
     depends_on:
       - gusto2-backend
     networks:
       - gusto2-network
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - frontend_cache:/app/node_modules/.cache
+    environment:
+      - CHOKIDAR_USEPOLLING=true
 
 networks:
   gusto2-network:
     driver: bridge
+
+volumes:
+  frontend_cache:
