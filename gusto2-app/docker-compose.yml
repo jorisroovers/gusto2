@@ -9,6 +9,7 @@ services:
       - gusto2-network
     volumes:
       - ./backend:/app
+      - ./data:/app/data
 
   gusto2-frontend:
     build: ./frontend

@@ -14,3 +14,5 @@ docker-compose.override.yml
 
 # General
 .env
+
+gusto2-app/data/*

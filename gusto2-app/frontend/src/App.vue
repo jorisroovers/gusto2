@@ -6,7 +6,7 @@
     <main>
       <div class="card">
         <p>{{ message }}</p>
-        <button @click="fetchMessage">Get Message from Backend</button>
+        <button @click="fetchMeal">Get First Meal from Backend</button>
       </div>
     </main>
   </div>
@@ -19,17 +19,17 @@ export default {
   name: 'App',
   data() {
     return {
-      message: 'Click the button to get a message from the backend 2'
+      message: 'Click the button to get the first meal from the backend'
     };
   },
   methods: {
-    async fetchMessage() {
+    async fetchMeal() {
       try {
         const response = await axios.get('/api/hello');
-        this.message = response.data.message;
+        this.message = `First Meal: ${response.data.meals[0]}`;
       } catch (error) {
-        console.error('Error fetching message:', error);
-        this.message = 'Error fetching message from backend';
+        console.error('Error fetching meal:', error);
+        this.message = 'Error fetching meal from backend';
       }
     }
   }
