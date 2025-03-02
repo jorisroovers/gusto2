@@ -11,16 +11,53 @@
         <div v-else class="meal-display">
           <!-- Meal information first with fixed height -->
           <div class="meal-info">
-            <div v-if="currentMeal.Name" class="meal-name">
-              <h3>{{ currentMeal.Name }}</h3>
+            <div v-if="!editMode">
+              <div v-if="currentMeal.Name" class="meal-name">
+                <h3>{{ currentMeal.Name }}</h3>
+              </div>
+              <div v-else class="no-meal-planned">
+                <h3>No meal planned</h3>
+              </div>
+              <div class="meal-description">
+                <p v-if="currentMeal.Description">{{ currentMeal.Description }}</p>
+                <p v-else>&nbsp;</p>
+              </div>
             </div>
-            <div v-else class="no-meal-planned">
-              <h3>No meal planned</h3>
+            <div v-else class="edit-form">
+              <div class="form-group">
+                <label for="mealName">Meal Name:</label>
+                <input 
+                  id="mealName" 
+                  type="text" 
+                  v-model="editedMeal.Name" 
+                  placeholder="Enter meal name"
+                />
+              </div>
+              <div class="form-group">
+                <label for="mealDescription">Description/Notes:</label>
+                <textarea 
+                  id="mealDescription" 
+                  v-model="editedMeal.Notes" 
+                  placeholder="Enter notes or description"
+                  rows="2"
+                ></textarea>
+              </div>
+              <div class="form-group">
+                <label for="mealTags">Tags:</label>
+                <input 
+                  id="mealTags" 
+                  type="text" 
+                  v-model="editedMeal.Tags" 
+                  placeholder="Enter tags (comma separated)"
+                />
+              </div>
             </div>
-            <div class="meal-description">
-              <p v-if="currentMeal.Description">{{ currentMeal.Description }}</p>
-              <p v-else>&nbsp;</p>
-            </div>
+          </div>
+          
+          <!-- Edit mode actions -->
+          <div v-if="editMode" class="edit-actions">
+            <button @click="saveMeal" class="save-button">Save</button>
+            <button @click="cancelEdit" class="cancel-button">Cancel</button>
           </div>
           
           <!-- Navigation buttons below meal info with date and counter -->
@@ -28,7 +65,7 @@
             <div class="nav-column">
               <button 
                 @click="previousMeal" 
-                :disabled="currentIndex <= 0"
+                :disabled="currentIndex <= 0 || editMode"
                 class="nav-button"
               >
                 &lt; Previous
@@ -36,6 +73,7 @@
               <button 
                 @click="findPreviousUnplanned" 
                 class="unplanned-button"
+                :disabled="editMode"
               >
                 &lt; Previous Unplanned
               </button>
@@ -43,14 +81,16 @@
             
             <div class="center-column">
               <p v-if="currentMeal.Date" class="date-display">{{ formatDate(currentMeal.Date) }}</p>
-              <button @click="selectTodaysMeal" class="today-button">Today</button>
+              <button @click="selectTodaysMeal" class="today-button" :disabled="editMode">Today</button>
               <p class="meal-counter">{{ currentIndex + 1 }} of {{ meals.length }}</p>
+              <!-- Edit button -->
+              <button v-if="!editMode" @click="startEdit" class="edit-button">Edit</button>
             </div>
             
             <div class="nav-column">
               <button 
                 @click="nextMeal" 
-                :disabled="currentIndex >= meals.length - 1"
+                :disabled="currentIndex >= meals.length - 1 || editMode"
                 class="nav-button"
               >
                 Next &gt;
@@ -58,6 +98,7 @@
               <button 
                 @click="findNextUnplanned" 
                 class="unplanned-button"
+                :disabled="editMode"
               >
                 Next Unplanned &gt;
               </button>
@@ -80,7 +121,9 @@ export default {
       currentIndex: 0,
       loading: true,
       error: null,
-      message: 'Loading meals from backend...'
+      message: 'Loading meals from backend...',
+      editMode: false,
+      editedMeal: {}
     };
   },
   computed: {
@@ -107,6 +150,42 @@ export default {
         this.loading = false;
       }
     },
+    
+    // New methods for editing
+    startEdit() {
+      this.editedMeal = { ...this.currentMeal };
+      this.editMode = true;
+    },
+    
+    cancelEdit() {
+      this.editMode = false;
+      this.editedMeal = {};
+    },
+    
+    async saveMeal() {
+      this.loading = true;
+      try {
+        // Send update to backend
+        await axios.put(`/api/meal/${this.currentIndex}`, this.editedMeal);
+        
+        // Update local data
+        this.meals[this.currentIndex] = { ...this.editedMeal };
+        
+        // Exit edit mode
+        this.editMode = false;
+        this.editedMeal = {};
+      } catch (error) {
+        console.error('Error saving meal:', error);
+        this.error = 'Failed to save meal changes';
+        setTimeout(() => {
+          this.error = null;
+        }, 3000);
+      } finally {
+        this.loading = false;
+      }
+    },
+    
+    // Existing methods
     selectTodaysMeal() {
       if (!this.meals.length) return;
       
@@ -345,6 +424,93 @@ header {
   margin: 0;
 }
 
+/* Edit mode styles */
+.edit-form {
+  width: 100%;
+  text-align: left;
+  padding: 0 10px;
+}
+
+.form-group {
+  margin-bottom: 12px;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 4px;
+  font-weight: 500;
+}
+
+.form-group input,
+.form-group textarea {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.edit-actions {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 15px;
+}
+
+.edit-button {
+  background-color: #f39c12;
+  border: none;
+  color: white;
+  padding: 6px 12px;
+  text-align: center;
+  text-decoration: none;
+  display: inline-block;
+  font-size: 12px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background-color 0.3s;
+}
+
+.edit-button:hover {
+  background-color: #e67e22;
+}
+
+.save-button {
+  background-color: #2ecc71;
+  border: none;
+  color: white;
+  padding: 8px 15px;
+  text-align: center;
+  text-decoration: none;
+  display: inline-block;
+  font-size: 14px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background-color 0.3s;
+}
+
+.save-button:hover {
+  background-color: #27ae60;
+}
+
+.cancel-button {
+  background-color: #95a5a6;
+  border: none;
+  color: white;
+  padding: 8px 15px;
+  text-align: center;
+  text-decoration: none;
+  display: inline-block;
+  font-size: 14px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background-color 0.3s;
+}
+
+.cancel-button:hover {
+  background-color: #7f8c8d;
+}
+
 .nav-button {
   background-color: #4CAF50;
   border: none;
@@ -396,6 +562,11 @@ header {
   background-color: #2980b9;
 }
 
+.today-button:disabled {
+  background-color: #cccccc;
+  cursor: not-allowed;
+}
+
 .unplanned-button {
   background-color: #9b59b6;
   border: none;
@@ -413,6 +584,11 @@ header {
 
 .unplanned-button:hover {
   background-color: #8e44ad;
+}
+
+.unplanned-button:disabled {
+  background-color: #cccccc;
+  cursor: not-allowed;
 }
 
 .loading, .error, .no-meals {
