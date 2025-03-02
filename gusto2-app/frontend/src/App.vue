@@ -9,6 +9,21 @@
         <div v-else-if="error" class="error">{{ error }}</div>
         <div v-else-if="meals.length === 0" class="no-meals">No meals found</div>
         <div v-else class="meal-display">
+          <!-- Meal information first with fixed height -->
+          <div class="meal-info">
+            <div v-if="currentMeal.Name" class="meal-name">
+              <h3>{{ currentMeal.Name }}</h3>
+            </div>
+            <div v-else class="no-meal-planned">
+              <h3>No meal planned</h3>
+            </div>
+            <div class="meal-description">
+              <p v-if="currentMeal.Description">{{ currentMeal.Description }}</p>
+              <p v-else>&nbsp;</p>
+            </div>
+          </div>
+          
+          <!-- Navigation buttons below meal info with date and counter -->
           <div class="navigation">
             <div class="nav-column">
               <button 
@@ -26,14 +41,10 @@
               </button>
             </div>
             
-            <div class="meal-info">
-              <h3>{{ currentMeal.Name }}</h3>
-              <p v-if="currentMeal.Date">Date: {{ formatDate(currentMeal.Date) }}</p>
-              <p v-if="currentMeal.Description">{{ currentMeal.Description }}</p>
-              <p class="meal-counter">Meal {{ currentIndex + 1 }} of {{ meals.length }}</p>
-              <div class="button-group">
-                <button @click="selectTodaysMeal" class="today-button">Today</button>
-              </div>
+            <div class="center-column">
+              <p v-if="currentMeal.Date" class="date-display">{{ formatDate(currentMeal.Date) }}</p>
+              <button @click="selectTodaysMeal" class="today-button">Today</button>
+              <p class="meal-counter">{{ currentIndex + 1 }} of {{ meals.length }}</p>
             </div>
             
             <div class="nav-column">
@@ -275,6 +286,9 @@ header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
+  margin-top: 20px;
+  padding-top: 15px;
+  border-top: 1px solid #eaeaea;
 }
 
 .nav-column {
@@ -283,15 +297,52 @@ header {
   gap: 8px;
 }
 
+.center-column {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.date-display {
+  margin: 0;
+  font-weight: 500;
+}
+
 .meal-info {
-  flex: 1;
-  margin: 0 20px;
+  text-align: center;
+  margin-bottom: 15px;
+  min-height: 100px; /* Fixed minimum height to prevent layout jumps */
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.meal-name h3 {
+  margin-top: 0;
+  margin-bottom: 10px;
+}
+
+.no-meal-planned h3 {
+  margin-top: 0;
+  margin-bottom: 10px;
+  color: #e74c3c;
+  font-style: italic;
+}
+
+.meal-description {
+  min-height: 40px; /* Fixed height for description area */
+}
+
+.meal-description p {
+  margin: 0;
 }
 
 .meal-counter {
   font-size: 0.8em;
   color: #666;
-  margin-top: 10px;
+  margin: 0;
 }
 
 .nav-button {
@@ -338,6 +389,7 @@ header {
   cursor: pointer;
   border-radius: 4px;
   transition: background-color 0.3s;
+  min-width: 80px;
 }
 
 .today-button:hover {
