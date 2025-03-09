@@ -2,9 +2,32 @@
   <div id="app">
     <header>
       <h1>Gusto2 App</h1>
+      <!-- Add save and reload buttons to the header -->
+      <div class="header-buttons">
+        <button 
+          @click="saveAllChanges" 
+          class="save-all-button" 
+          :disabled="!hasChanges || loading"
+          :title="!hasChanges ? 'No changes to save' : 'Save all changes'"
+        >
+          Save All Changes
+        </button>
+        <button 
+          @click="reloadMeals" 
+          class="reload-button" 
+          :disabled="loading"
+          title="Reload meals from server (discards unsaved changes)"
+        >
+          Reload
+        </button>
+      </div>
     </header>
     <main>
       <div class="card">
+        <!-- Notification area for saving/reloading status -->
+        <div v-if="notification" class="notification" :class="notificationType">
+          {{ notification }}
+        </div>
         <div v-if="loading" class="loading">Loading meals...</div>
         <div v-else-if="error" class="error">{{ error }}</div>
         <div v-else-if="meals.length === 0" class="no-meals">No meals found</div>
@@ -14,12 +37,16 @@
             <div v-if="!editMode">
               <div v-if="currentMeal.Name" class="meal-name">
                 <h3>{{ currentMeal.Name }}</h3>
+                <!-- Only show asterisk if current meal is in changedIndices -->
+                <span v-if="isCurrentMealChanged" class="changed-indicator" title="This meal has unsaved changes">*</span>
               </div>
               <div v-else class="no-meal-planned">
                 <h3>No meal planned</h3>
+                <!-- Only show asterisk if current meal is in changedIndices -->
+                <span v-if="isCurrentMealChanged" class="changed-indicator" title="This meal has unsaved changes">*</span>
               </div>
               <div class="meal-description">
-                <p v-if="currentMeal.Description">{{ currentMeal.Description }}</p>
+                <p v-if="currentMeal.Notes">{{ currentMeal.Notes }}</p>
                 <p v-else>&nbsp;</p>
               </div>
             </div>
@@ -123,12 +150,19 @@ export default {
       error: null,
       message: 'Loading meals from backend...',
       editMode: false,
-      editedMeal: {}
+      editedMeal: {},
+      notification: '',
+      notificationType: 'info',
+      hasChanges: false, // Track if there are changes on the server
+      changedIndices: [] // Track which specific indices have been changed
     };
   },
   computed: {
     currentMeal() {
       return this.meals.length > 0 ? this.meals[this.currentIndex] : {};
+    },
+    isCurrentMealChanged() {
+      return this.changedIndices.includes(this.currentIndex);
     }
   },
   methods: {
@@ -139,6 +173,13 @@ export default {
         const response = await axios.get('/api/hello');
         if (response.data && response.data.meals && response.data.meals.length > 0) {
           this.meals = response.data.meals;
+          
+          // Track if there are changes on the server
+          this.hasChanges = response.data.hasChanges || false;
+          
+          // Store the changed indices
+          this.changedIndices = response.data.changedIndices || [];
+          
           this.selectTodaysMeal();
         } else {
           this.error = 'No meals data found';
@@ -151,7 +192,62 @@ export default {
       }
     },
     
-    // New methods for editing
+    // Methods for saving and reloading
+    async saveAllChanges() {
+      if (!this.hasChanges) return;
+      
+      this.loading = true;
+      try {
+        // Send all meals to the backend
+        await axios.post('/api/meals/save', this.meals);
+        
+        // Reset the changes flag and changed indices
+        this.hasChanges = false;
+        this.changedIndices = [];
+        
+        // Show success notification
+        this.showNotification('All changes saved successfully!', 'success');
+      } catch (error) {
+        console.error('Error saving all changes:', error);
+        this.showNotification('Failed to save changes: ' + (error.response?.data?.detail || error.message), 'error');
+      } finally {
+        this.loading = false;
+      }
+    },
+    
+    async reloadMeals() {
+      this.loading = true;
+      try {
+        const response = await axios.get('/api/meals/reload');
+        if (response.data && response.data.meals) {
+          this.meals = response.data.meals;
+          
+          // Reset the changes flag and changed indices
+          this.hasChanges = false;
+          this.changedIndices = [];
+          
+          // Show success notification
+          this.showNotification('Meals reloaded from server', 'info');
+        }
+      } catch (error) {
+        console.error('Error reloading meals:', error);
+        this.showNotification('Failed to reload meals: ' + (error.response?.data?.detail || error.message), 'error');
+      } finally {
+        this.loading = false;
+      }
+    },
+    
+    showNotification(message, type = 'info') {
+      this.notification = message;
+      this.notificationType = type;
+      
+      // Auto-hide notification after 3 seconds
+      setTimeout(() => {
+        this.notification = '';
+      }, 3000);
+    },
+    
+    // Modified methods for editing
     startEdit() {
       this.editedMeal = { ...this.currentMeal };
       this.editMode = true;
@@ -165,27 +261,31 @@ export default {
     async saveMeal() {
       this.loading = true;
       try {
-        // Send update to backend
-        await axios.put(`/api/meal/${this.currentIndex}`, this.editedMeal);
+        // Send the updated meal directly to the backend
+        const response = await axios.put(`/api/meal/${this.currentIndex}`, this.editedMeal);
         
-        // Update local data
+        // Update local data with the edited meal
         this.meals[this.currentIndex] = { ...this.editedMeal };
+        
+        // Set the changes flag to true and update changed indices from server response
+        this.hasChanges = true;
+        this.changedIndices = response.data.changedIndices || [];
+        
+        // Show success message
+        this.showNotification('Meal updated! Use Save All to persist to disk.', 'success');
         
         // Exit edit mode
         this.editMode = false;
         this.editedMeal = {};
       } catch (error) {
         console.error('Error saving meal:', error);
-        this.error = 'Failed to save meal changes';
-        setTimeout(() => {
-          this.error = null;
-        }, 3000);
+        this.showNotification('Failed to update meal', 'error');
       } finally {
         this.loading = false;
       }
     },
     
-    // Existing methods
+    // Existing navigation methods
     selectTodaysMeal() {
       if (!this.meals.length) return;
       
@@ -350,6 +450,15 @@ export default {
 
 header {
   margin-bottom: 30px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.header-buttons {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
 }
 
 .card {
@@ -359,6 +468,32 @@ header {
   border-radius: 8px;
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
   background-color: #f9f9f9;
+}
+
+.notification {
+  padding: 10px;
+  margin-bottom: 15px;
+  border-radius: 5px;
+  font-weight: 500;
+  text-align: center;
+}
+
+.notification.success {
+  background-color: #d4edda;
+  color: #155724;
+  border: 1px solid #c3e6cb;
+}
+
+.notification.error {
+  background-color: #f8d7da;
+  color: #721c24;
+  border: 1px solid #f5c6cb;
+}
+
+.notification.info {
+  background-color: #d1ecf1;
+  color: #0c5460;
+  border: 1px solid #bee5eb;
 }
 
 .navigation {
@@ -398,9 +533,18 @@ header {
   justify-content: center;
 }
 
+.meal-name {
+  position: relative;
+}
+
 .meal-name h3 {
   margin-top: 0;
   margin-bottom: 10px;
+  display: inline-block;
+}
+
+.no-meal-planned {
+  position: relative;
 }
 
 .no-meal-planned h3 {
@@ -408,6 +552,15 @@ header {
   margin-bottom: 10px;
   color: #e74c3c;
   font-style: italic;
+  display: inline-block;
+}
+
+.changed-indicator {
+  color: #e74c3c;
+  font-weight: bold;
+  font-size: 1.2em;
+  margin-left: 5px;
+  vertical-align: top;
 }
 
 .meal-description {
@@ -455,6 +608,52 @@ header {
   justify-content: center;
   gap: 10px;
   margin-bottom: 15px;
+}
+
+.save-all-button {
+  background-color: #2ecc71;
+  border: none;
+  color: white;
+  padding: 8px 15px;
+  text-align: center;
+  text-decoration: none;
+  display: inline-block;
+  font-size: 14px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background-color 0.3s;
+}
+
+.save-all-button:hover {
+  background-color: #27ae60;
+}
+
+.save-all-button:disabled {
+  background-color: #cccccc;
+  cursor: not-allowed;
+}
+
+.reload-button {
+  background-color: #3498db;
+  border: none;
+  color: white;
+  padding: 8px 15px;
+  text-align: center;
+  text-decoration: none;
+  display: inline-block;
+  font-size: 14px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background-color 0.3s;
+}
+
+.reload-button:hover {
+  background-color: #2980b9;
+}
+
+.reload-button:disabled {
+  background-color: #cccccc;
+  cursor: not-allowed;
 }
 
 .edit-button {
