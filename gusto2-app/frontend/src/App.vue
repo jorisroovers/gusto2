@@ -154,7 +154,8 @@ export default {
       notification: '',
       notificationType: 'info',
       hasChanges: false, // Track if there are changes on the server
-      changedIndices: [] // Track which specific indices have been changed
+      changedIndices: [], // Track which specific indices have been changed
+      lastViewedDate: null // Store the date of the last viewed meal
     };
   },
   computed: {
@@ -217,6 +218,11 @@ export default {
     
     async reloadMeals() {
       this.loading = true;
+      
+      // Store the current meal date before reloading
+      const currentDate = this.currentMeal.Date ? new Date(this.currentMeal.Date) : null;
+      this.lastViewedDate = currentDate;
+      
       try {
         const response = await axios.get('/api/meals/reload');
         if (response.data && response.data.meals) {
@@ -225,6 +231,9 @@ export default {
           // Reset the changes flag and changed indices
           this.hasChanges = false;
           this.changedIndices = [];
+          
+          // Restore position to the previously viewed meal
+          this.restoreMealPosition();
           
           // Show success notification
           this.showNotification('Meals reloaded from server', 'info');
@@ -235,6 +244,62 @@ export default {
       } finally {
         this.loading = false;
       }
+    },
+    
+    restoreMealPosition() {
+      // If we don't have a last viewed date, use default behavior
+      if (!this.lastViewedDate || !this.meals.length) {
+        this.selectTodaysMeal();
+        return;
+      }
+      
+      // Try to find the same date in the reloaded data
+      const lastViewedIndex = this.meals.findIndex(meal => {
+        if (!meal.Date) return false;
+        
+        const mealDate = new Date(meal.Date);
+        return (
+          mealDate.getFullYear() === this.lastViewedDate.getFullYear() &&
+          mealDate.getMonth() === this.lastViewedDate.getMonth() &&
+          mealDate.getDate() === this.lastViewedDate.getDate()
+        );
+      });
+      
+      if (lastViewedIndex !== -1) {
+        // Found the same date, restore to this position
+        this.currentIndex = lastViewedIndex;
+        console.log(`Restored to previously viewed date at index ${lastViewedIndex}`);
+      } else {
+        // Date not found, try to find the closest date
+        console.log('Previously viewed date not found, finding nearest date');
+        this.findNearestDateTo(this.lastViewedDate);
+      }
+    },
+    
+    findNearestDateTo(targetDate) {
+      if (!this.meals.length || !targetDate) return;
+      
+      let closestIndex = 0;
+      let smallestDiff = Infinity;
+      
+      // Find the meal date closest to the target date
+      this.meals.forEach((meal, index) => {
+        if (!meal.Date) return;
+        
+        const mealDate = new Date(meal.Date);
+        mealDate.setHours(0, 0, 0, 0);
+        
+        // Calculate absolute difference in days
+        const diff = Math.abs(mealDate - targetDate);
+        
+        if (diff < smallestDiff) {
+          smallestDiff = diff;
+          closestIndex = index;
+        }
+      });
+      
+      this.currentIndex = closestIndex;
+      console.log(`Found nearest date at index ${closestIndex}`);
     },
     
     showNotification(message, type = 'info') {

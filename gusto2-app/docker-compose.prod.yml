@@ -9,6 +9,9 @@ services:
       - gusto2-network
     volumes:
       - ${DATA_VOLUME:-./data}:/app/data
+    environment:
+      - NOTION_API_TOKEN=${NOTION_API_TOKEN}
+      - NOTION_MEALPLAN_PAGE_ID=${NOTION_MEALPLAN_PAGE_ID}
 
   gusto2-frontend:
     build: 

@@ -2,8 +2,16 @@ import os
 import pandas as pd
 from fastapi import FastAPI, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
-from typing import Dict, Any, List, Optional, Set
 from pydantic import BaseModel
+from typing import Dict, Any, List, Optional
+import logging
+from datetime import datetime
+import requests
+import json
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = FastAPI()
 
@@ -15,6 +23,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Notion API configuration
+NOTION_API_TOKEN = os.environ.get("NOTION_API_TOKEN")
+NOTION_MEALPLAN_PAGE_ID = os.environ.get("NOTION_MEALPLAN_PAGE_ID")
 
 # Path to the data directory
 DATA_DIR = "/app/data"
@@ -33,6 +45,150 @@ class Meal(BaseModel):
 all_meals_df = None
 changeset_df = None  # Store the changeset persistently
 changed_indices = set()  # Track which meal indices have been modified
+
+def fetch_from_notion():
+    """Fetch meal data from Notion database and save to local file"""
+    if not NOTION_API_TOKEN or not NOTION_MEALPLAN_PAGE_ID:
+        logger.warning("Notion API token or page ID not provided. Skipping Notion fetch.")
+        return False
+    
+    try:
+        # Set up headers for Notion API
+        headers = {
+            "Authorization": f"Bearer {NOTION_API_TOKEN}",
+            "Content-Type": "application/json",
+            "Notion-Version": "2022-06-28"  # Use the current Notion API version
+        }
+        
+        # Query the database using Notion's REST API
+        logger.info(f"Fetching meals from Notion database: {NOTION_MEALPLAN_PAGE_ID}")
+        
+        # API endpoint for querying a database
+        url = f"https://api.notion.com/v1/databases/{NOTION_MEALPLAN_PAGE_ID}/query"
+        
+        # Collect all pages with pagination
+        has_more = True
+        start_cursor = None
+        all_results = []
+        
+        while has_more:
+            # Prepare query with sort by date
+            query_data = {
+                "sorts": [{"property": "Date", "direction": "ascending"}]
+            }
+            
+            # Add start_cursor for pagination if we have one
+            if start_cursor:
+                query_data["start_cursor"] = start_cursor
+                
+            # Make the API request
+            response = requests.post(url, headers=headers, json=query_data)
+            
+            # Check for successful response
+            if response.status_code != 200:
+                logger.error(f"Failed to fetch from Notion API: {response.status_code} - {response.text}")
+                return False
+            
+            # Parse the JSON response
+            data = response.json()
+            
+            # Add results to our collection
+            all_results.extend(data.get("results", []))
+            
+            # Check if there are more pages
+            has_more = data.get("has_more", False)
+            start_cursor = data.get("next_cursor")
+            
+            logger.info(f"Fetched {len(data.get('results', []))} meals from Notion, has_more: {has_more}")
+        
+        logger.info(f"Total meals fetched from Notion: {len(all_results)}")
+        
+        # Process the response into a DataFrame
+        meals_data = []
+        
+        for page in all_results:
+            properties = page.get("properties", {})
+            meal = {}
+            
+            # Extract date if exists
+            if "Date" in properties:
+                date_prop = properties["Date"]
+                if date_prop["type"] == "date" and date_prop.get("date"):
+                    date_str = date_prop["date"].get("start")
+                    if date_str:
+                        # Convert from ISO format to our expected format
+                        try:
+                            date_obj = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
+                            meal["Date"] = date_obj.strftime('%Y/%m/%d')
+                        except ValueError:
+                            meal["Date"] = None
+            
+            # Extract name if exists
+            if "Name" in properties:
+                name_prop = properties["Name"]
+                if name_prop["type"] == "title" and name_prop.get("title"):
+                    title_parts = [part.get("plain_text", "") for part in name_prop.get("title", [])]
+                    meal["Name"] = " ".join(title_parts).strip()
+            
+            # Extract tags if exists
+            if "Tags" in properties:
+                tags_prop = properties["Tags"]
+                if tags_prop["type"] == "multi_select" and tags_prop.get("multi_select"):
+                    tags = [tag.get("name", "") for tag in tags_prop.get("multi_select", [])]
+                    meal["Tags"] = ", ".join(tags)
+            
+            # Extract notes if exists
+            if "Notes" in properties:
+                notes_prop = properties["Notes"]
+                if notes_prop["type"] == "rich_text" and notes_prop.get("rich_text"):
+                    notes_parts = [part.get("plain_text", "") for part in notes_prop.get("rich_text", [])]
+                    meal["Notes"] = " ".join(notes_parts).strip()
+                    
+            meals_data.append(meal)
+        
+        # Create DataFrame
+        if not meals_data:
+            logger.warning("No meal data found in Notion database")
+            return False
+            
+        meals_df = pd.DataFrame(meals_data)
+        
+        # Convert Date to datetime for sorting
+        if 'Date' in meals_df.columns:
+            meals_df['Date'] = pd.to_datetime(meals_df['Date'], errors='coerce')
+            
+        # Sort by date (although we already requested sorted data from Notion)
+        # This ensures proper ordering in case some dates were invalid
+        if 'Date' in meals_df.columns:
+            meals_df = meals_df.sort_values(by='Date')
+        
+        # Add Weekday column
+        if 'Date' in meals_df.columns and meals_df['Date'].notna().any():
+            # Create a Weekday column with the day name
+            meals_df['Weekday'] = meals_df['Date'].apply(
+                lambda x: x.day_name() if pd.notna(x) else None
+            )
+            
+        # Convert Date back to string format for saving
+        if 'Date' in meals_df.columns:
+            meals_df['Date'] = meals_df['Date'].apply(
+                lambda x: x.strftime('%Y/%m/%d') if pd.notna(x) else None
+            )
+        
+        # Ensure directory exists
+        os.makedirs(os.path.dirname(MEALS_CSV), exist_ok=True)
+        
+        # Save to CSV
+        columns = ['Weekday', 'Date', 'Name', 'Tags', 'Notes']
+        columns = [col for col in columns if col in meals_df.columns]
+        meals_df.to_csv(MEALS_CSV, index=False, columns=columns)
+        
+        logger.info(f"Successfully saved {len(meals_data)} meals from Notion to {MEALS_CSV}")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Failed to fetch meal data from Notion: {str(e)}")
+        return False
 
 def read_meals():
     global all_meals_df
@@ -292,7 +448,8 @@ async def save_meals(meals: List[Dict[str, Any]] = Body(...)):
 
 @app.get("/api/meals/reload")
 async def reload_meals():
-    """Force reload meals from the CSV file, discarding any unsaved changes."""
+    """Force reload meals from the CSV file, discarding any unsaved changes.
+    Also attempts to fetch updated data from Notion if configured."""
     try:
         # Force reload by resetting the cached DataFrame
         global all_meals_df, changeset_df, changed_indices
@@ -305,21 +462,30 @@ async def reload_meals():
             try:
                 os.remove(CHANGESET_FILE)
             except Exception as e:
-                print(f"Error removing changeset file: {e}")
+                logger.error(f"Error removing changeset file: {e}")
         
         # Remove the changed indices file if it exists
         if os.path.exists(CHANGED_INDICES_FILE):
             try:
                 os.remove(CHANGED_INDICES_FILE)
             except Exception as e:
-                print(f"Error removing changed indices file: {e}")
+                logger.error(f"Error removing changed indices file: {e}")
         
-        # Read the meals from the CSV file
+        # First try to fetch fresh data from Notion
+        notion_fetch_success = fetch_from_notion()
+        
+        # Read the meals from the CSV file (either the newly fetched one or the existing one)
         meals = read_meals()
         
-        return {"status": "success", "message": "Meals reloaded successfully", "meals": df_to_json(meals)}
+        return {
+            "status": "success", 
+            "message": "Meals reloaded successfully" + (" (updated from Notion)" if notion_fetch_success else " (from local file)"), 
+            "meals": df_to_json(meals),
+            "notionUpdated": notion_fetch_success
+        }
         
     except Exception as e:
+        logger.error(f"Failed to reload meals: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to reload meals: {str(e)}")
 
 @app.get("/api/meals/changes")
