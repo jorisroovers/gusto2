@@ -2,8 +2,25 @@
   <div id="app">
     <header>
       <h1>Gusto2 App</h1>
-      <!-- Add save and reload buttons to the header -->
-      <div class="header-buttons">
+      <!-- Navigation tabs -->
+      <div class="nav-tabs">
+        <button 
+          @click="currentView = 'mealplan'"
+          :class="{ active: currentView === 'mealplan' }"
+          class="tab-button"
+        >
+          Meal Plan
+        </button>
+        <button 
+          @click="currentView = 'recipes'"
+          :class="{ active: currentView === 'recipes' }"
+          class="tab-button"
+        >
+          Recipes
+        </button>
+      </div>
+      <!-- Show save/reload buttons only in meal plan view -->
+      <div v-if="currentView === 'mealplan'" class="header-buttons">
         <button 
           @click="saveAllChanges" 
           class="save-all-button" 
@@ -23,7 +40,8 @@
       </div>
     </header>
     <main>
-      <div class="card">
+      <!-- Meal Plan View -->
+      <div v-if="currentView === 'mealplan'" class="card">
         <!-- Notification area for saving/reloading status -->
         <div v-if="notification" class="notification" :class="notificationType">
           {{ notification }}
@@ -133,17 +151,27 @@
           </div>
         </div>
       </div>
+
+      <!-- Recipes View -->
+      <div v-else-if="currentView === 'recipes'" class="card">
+        <recipe-list />
+      </div>
     </main>
   </div>
 </template>
 
 <script>
 import axios from 'axios';
+import RecipeList from './components/RecipeList.vue';
 
 export default {
   name: 'App',
+  components: {
+    RecipeList
+  },
   data() {
     return {
+      currentView: 'mealplan',  // 'mealplan' or 'recipes'
       meals: [],
       currentIndex: 0,
       loading: true,
@@ -862,5 +890,39 @@ header {
 
 .error {
   color: #e74c3c;
+}
+
+/* Add new styles for navigation tabs */
+.nav-tabs {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin: 10px 0 20px 0;
+}
+
+.tab-button {
+  background-color: #f8f9fa;
+  border: 1px solid #dee2e6;
+  color: #495057;
+  padding: 10px 20px;
+  cursor: pointer;
+  border-radius: 4px;
+  font-size: 16px;
+  transition: all 0.3s ease;
+}
+
+.tab-button:hover {
+  background-color: #e9ecef;
+}
+
+.tab-button.active {
+  background-color: #3498db;
+  color: white;
+  border-color: #3498db;
+}
+
+/* Move header buttons below tabs */
+.header-buttons {
+  margin-top: 10px;
 }
 </style>

@@ -31,6 +31,7 @@ NOTION_MEALPLAN_PAGE_ID = os.environ.get("NOTION_MEALPLAN_PAGE_ID")
 # Path to the data directory
 DATA_DIR = "/app/data"
 MEALS_CSV = os.path.join(DATA_DIR, "meals.csv")
+RECIPES_CSV = os.path.join(DATA_DIR, "recipes.csv")
 CHANGESET_FILE = os.path.join(DATA_DIR, "changeset.csv")
 CHANGED_INDICES_FILE = os.path.join(DATA_DIR, "changed_indices.txt")
 # Store Notion page IDs for each row to enable updates
@@ -41,6 +42,7 @@ all_meals_df = None
 changeset_df = None  # Store the changeset persistently
 changed_indices = set()  # Track which meal indices have been modified
 notion_page_ids = {}  # Map dates to Notion page IDs
+recipes_df = None
 
 # Model for meal data
 class Meal(BaseModel):
@@ -48,6 +50,11 @@ class Meal(BaseModel):
     Date: Optional[str] = None
     Tags: Optional[str] = None
     Notes: Optional[str] = None
+
+# Model for recipe data
+class Recipe(BaseModel):
+    Name: str
+    Tags: Optional[str] = None
 
 # Load Notion page IDs mapping if it exists
 def load_notion_page_ids():
@@ -536,6 +543,57 @@ def save_meals_to_csv(meals_df):
     
     return True
 
+def read_recipes():
+    """Read recipes from CSV file"""
+    global recipes_df
+    
+    if recipes_df is not None:
+        return recipes_df
+    
+    if os.path.exists(RECIPES_CSV):
+        recipes = pd.read_csv(RECIPES_CSV)
+        recipes = recipes.replace({pd.NA: None, pd.NaT: None})
+    else:
+        recipes = pd.DataFrame(columns=['Name', 'Tags'])
+    
+    recipes_df = recipes
+    return recipes
+
+def save_recipes(df):
+    """Save recipes to CSV file"""
+    global recipes_df
+    recipes_df = df.copy()
+    
+    # Ensure directory exists
+    os.makedirs(os.path.dirname(RECIPES_CSV), exist_ok=True)
+    
+    # Save to CSV
+    df.to_csv(RECIPES_CSV, index=False)
+    
+    return True
+
+def populate_recipes_from_meals():
+    """Populate recipes database with unique meals from the meal plan"""
+    meals = read_meals()
+    existing_recipes = read_recipes()
+    
+    # Get unique meals with their tags
+    unique_meals = meals[['Name', 'Tags']].dropna(subset=['Name']).drop_duplicates()
+    
+    # If we already have recipes, only add new ones
+    if not existing_recipes.empty:
+        # Only add meals that aren't already in recipes
+        existing_names = set(existing_recipes['Name'].dropna())
+        unique_meals = unique_meals[~unique_meals['Name'].isin(existing_names)]
+    
+    if not unique_meals.empty:
+        # Combine existing and new recipes
+        combined_recipes = pd.concat([existing_recipes, unique_meals], ignore_index=True)
+        save_recipes(combined_recipes)
+        logger.info(f"Added {len(unique_meals)} new recipes from meals")
+    
+    return read_recipes()
+
 # Initialize by loading page IDs
 load_notion_page_ids()
 
@@ -699,6 +757,101 @@ async def add_to_changeset(meals: List[Dict[str, Any]] = Body(...)):
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to add to changeset: {str(e)}")
+
+@app.get("/api/recipes")
+async def get_recipes():
+    """Get all recipes"""
+    try:
+        recipes = read_recipes()
+        return {"recipes": df_to_json(recipes)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get recipes: {str(e)}")
+
+@app.post("/api/recipes")
+async def create_recipe(recipe: Recipe):
+    """Create a new recipe"""
+    try:
+        recipes = read_recipes()
+        
+        # Check if recipe already exists
+        if not recipes.empty and recipe.Name in recipes['Name'].values:
+            raise HTTPException(status_code=400, detail="Recipe already exists")
+        
+        # Add new recipe
+        new_recipe = pd.DataFrame([recipe.dict()])
+        recipes = pd.concat([recipes, new_recipe], ignore_index=True)
+        
+        # Save updated recipes
+        save_recipes(recipes)
+        
+        return {"status": "success", "message": "Recipe created successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to create recipe: {str(e)}")
+
+@app.delete("/api/recipes/{name}")
+async def delete_recipe(name: str):
+    """Delete a recipe by name"""
+    try:
+        recipes = read_recipes()
+        
+        # Check if recipe exists
+        if recipes.empty or name not in recipes['Name'].values:
+            raise HTTPException(status_code=404, detail="Recipe not found")
+        
+        # Remove recipe
+        recipes = recipes[recipes['Name'] != name]
+        
+        # Save updated recipes
+        save_recipes(recipes)
+        
+        return {"status": "success", "message": "Recipe deleted successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to delete recipe: {str(e)}")
+
+@app.put("/api/recipes/{name}")
+async def update_recipe(name: str, recipe: Recipe):
+    """Update a recipe by name"""
+    try:
+        recipes = read_recipes()
+        
+        # Check if recipe exists
+        if recipes.empty or name not in recipes['Name'].values:
+            raise HTTPException(status_code=404, detail="Recipe not found")
+        
+        # Update recipe
+        recipes.loc[recipes['Name'] == name, 'Tags'] = recipe.Tags
+        
+        # If name is being changed, verify new name doesn't exist
+        if recipe.Name != name:
+            if recipe.Name in recipes['Name'].values:
+                raise HTTPException(status_code=400, detail="Recipe with new name already exists")
+            recipes.loc[recipes['Name'] == name, 'Name'] = recipe.Name
+        
+        # Save updated recipes
+        save_recipes(recipes)
+        
+        return {"status": "success", "message": "Recipe updated successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to update recipe: {str(e)}")
+
+@app.post("/api/recipes/populate")
+async def populate_recipes():
+    """Populate recipes from unique meals in the meal plan"""
+    try:
+        recipes = populate_recipes_from_meals()
+        return {
+            "status": "success",
+            "message": "Recipes populated successfully",
+            "recipes": df_to_json(recipes)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to populate recipes: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn
