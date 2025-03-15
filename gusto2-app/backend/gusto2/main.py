@@ -33,6 +33,14 @@ DATA_DIR = "/app/data"
 MEALS_CSV = os.path.join(DATA_DIR, "meals.csv")
 CHANGESET_FILE = os.path.join(DATA_DIR, "changeset.csv")
 CHANGED_INDICES_FILE = os.path.join(DATA_DIR, "changed_indices.txt")
+# Store Notion page IDs for each row to enable updates
+NOTION_PAGE_IDS_FILE = os.path.join(DATA_DIR, "notion_page_ids.json")
+
+# Global variables to store loaded data
+all_meals_df = None
+changeset_df = None  # Store the changeset persistently
+changed_indices = set()  # Track which meal indices have been modified
+notion_page_ids = {}  # Map dates to Notion page IDs
 
 # Model for meal data
 class Meal(BaseModel):
@@ -41,13 +49,32 @@ class Meal(BaseModel):
     Tags: Optional[str] = None
     Notes: Optional[str] = None
 
-# Global variables to store loaded data
-all_meals_df = None
-changeset_df = None  # Store the changeset persistently
-changed_indices = set()  # Track which meal indices have been modified
+# Load Notion page IDs mapping if it exists
+def load_notion_page_ids():
+    global notion_page_ids
+    if os.path.exists(NOTION_PAGE_IDS_FILE):
+        try:
+            with open(NOTION_PAGE_IDS_FILE, 'r') as f:
+                notion_page_ids = json.load(f)
+            logger.info(f"Loaded {len(notion_page_ids)} Notion page IDs from file")
+        except Exception as e:
+            logger.error(f"Error loading Notion page IDs: {e}")
+            notion_page_ids = {}
+    return notion_page_ids
+
+# Save Notion page IDs mapping to file
+def save_notion_page_ids():
+    try:
+        with open(NOTION_PAGE_IDS_FILE, 'w') as f:
+            json.dump(notion_page_ids, f)
+        logger.info(f"Saved {len(notion_page_ids)} Notion page IDs to file")
+    except Exception as e:
+        logger.error(f"Error saving Notion page IDs: {e}")
 
 def fetch_from_notion():
     """Fetch meal data from Notion database and save to local file"""
+    global notion_page_ids
+    
     if not NOTION_API_TOKEN or not NOTION_MEALPLAN_PAGE_ID:
         logger.warning("Notion API token or page ID not provided. Skipping Notion fetch.")
         return False
@@ -70,6 +97,9 @@ def fetch_from_notion():
         has_more = True
         start_cursor = None
         all_results = []
+        
+        # Reset the page IDs mapping
+        notion_page_ids = {}
         
         while has_more:
             # Prepare query with sort by date
@@ -107,10 +137,12 @@ def fetch_from_notion():
         meals_data = []
         
         for page in all_results:
+            page_id = page.get("id")
             properties = page.get("properties", {})
             meal = {}
             
             # Extract date if exists
+            date_str = None
             if "Date" in properties:
                 date_prop = properties["Date"]
                 if date_prop["type"] == "date" and date_prop.get("date"):
@@ -120,6 +152,9 @@ def fetch_from_notion():
                         try:
                             date_obj = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
                             meal["Date"] = date_obj.strftime('%Y/%m/%d')
+                            
+                            # Store the page ID mapped to the date string for later updates
+                            notion_page_ids[meal["Date"]] = page_id
                         except ValueError:
                             meal["Date"] = None
             
@@ -183,11 +218,129 @@ def fetch_from_notion():
         columns = [col for col in columns if col in meals_df.columns]
         meals_df.to_csv(MEALS_CSV, index=False, columns=columns)
         
+        # Save the mapping of dates to Notion page IDs
+        save_notion_page_ids()
+        
         logger.info(f"Successfully saved {len(meals_data)} meals from Notion to {MEALS_CSV}")
         return True
         
     except Exception as e:
         logger.error(f"Failed to fetch meal data from Notion: {str(e)}")
+        return False
+
+def save_to_notion(meals_df, changed_indices_set):
+    """Save changed meal rows back to Notion"""
+    if not NOTION_API_TOKEN:
+        logger.warning("Notion API token not provided. Skipping Notion update.")
+        return False
+    
+    # Load the Notion page IDs mapping if not already loaded
+    if not notion_page_ids:
+        load_notion_page_ids()
+    
+    if not notion_page_ids:
+        logger.warning("No Notion page IDs mapping available. Cannot update Notion.")
+        return False
+    
+    try:
+        # Set up headers for Notion API
+        headers = {
+            "Authorization": f"Bearer {NOTION_API_TOKEN}",
+            "Content-Type": "application/json",
+            "Notion-Version": "2022-06-28"
+        }
+        
+        success_count = 0
+        
+        # Get only the changed meals by their indices
+        for idx in changed_indices_set:
+            if idx >= len(meals_df):
+                logger.warning(f"Index {idx} is out of bounds for meals dataframe of length {len(meals_df)}")
+                continue
+                
+            # Get the meal data at this index
+            meal = meals_df.iloc[idx].to_dict()
+            
+            # Skip if no date (we need the date to find the Notion page ID)
+            if 'Date' not in meal or not meal['Date'] or pd.isna(meal['Date']):
+                logger.warning(f"Meal at index {idx} has no valid date, skipping Notion update")
+                continue
+                
+            # Convert date to string format if it's not already
+            if isinstance(meal['Date'], pd.Timestamp):
+                date_str = meal['Date'].strftime('%Y/%m/%d')
+            else:
+                date_str = str(meal['Date'])
+            
+            # Check if we have the page ID for this date
+            if date_str not in notion_page_ids:
+                logger.warning(f"No Notion page ID found for date {date_str}, skipping update")
+                continue
+                
+            page_id = notion_page_ids[date_str]
+            
+            # Prepare the update payload
+            properties = {}
+            
+            # Add Name property (title)
+            if 'Name' in meal and meal['Name'] and not pd.isna(meal['Name']):
+                properties["Name"] = {
+                    "title": [
+                        {
+                            "type": "text",
+                            "text": {"content": meal['Name']}
+                        }
+                    ]
+                }
+            else:
+                # Clear the title if Name is empty
+                properties["Name"] = {"title": []}
+            
+            # Add Notes property (rich text)
+            if 'Notes' in meal and meal['Notes'] and not pd.isna(meal['Notes']):
+                properties["Notes"] = {
+                    "rich_text": [
+                        {
+                            "type": "text",
+                            "text": {"content": meal['Notes']}
+                        }
+                    ]
+                }
+            else:
+                # Clear the notes if empty
+                properties["Notes"] = {"rich_text": []}
+            
+            # Add Tags property (multi-select)
+            if 'Tags' in meal and meal['Tags'] and not pd.isna(meal['Tags']):
+                tags = [tag.strip() for tag in meal['Tags'].split(',') if tag.strip()]
+                properties["Tags"] = {
+                    "multi_select": [{"name": tag} for tag in tags]
+                }
+            else:
+                # Clear tags if empty
+                properties["Tags"] = {"multi_select": []}
+            
+            # Create the update request payload
+            update_data = {
+                "properties": properties
+            }
+            
+            # Make the API request to update the page
+            update_url = f"https://api.notion.com/v1/pages/{page_id}"
+            response = requests.patch(update_url, headers=headers, json=update_data)
+            
+            # Check for successful response
+            if response.status_code == 200:
+                logger.info(f"Successfully updated Notion page for date {date_str}")
+                success_count += 1
+            else:
+                logger.error(f"Failed to update Notion page for date {date_str}: {response.status_code} - {response.text}")
+        
+        logger.info(f"Updated {success_count} meal(s) in Notion out of {len(changed_indices_set)} changed indices")
+        return success_count > 0
+        
+    except Exception as e:
+        logger.error(f"Failed to save changes to Notion: {str(e)}")
         return False
 
 def read_meals():
@@ -383,6 +536,9 @@ def save_meals_to_csv(meals_df):
     
     return True
 
+# Initialize by loading page IDs
+load_notion_page_ids()
+
 @app.get("/api/hello")
 async def hello_world():
     # First, check if there's a changeset
@@ -429,7 +585,7 @@ async def update_meal(index: int, meal: Dict[str, Any] = Body(...)):
 
 @app.post("/api/meals/save")
 async def save_meals(meals: List[Dict[str, Any]] = Body(...)):
-    """Save all meals from the changeset to the CSV file."""
+    """Save all meals from the changeset to the CSV file and update Notion."""
     try:
         # Create a DataFrame from the received meals
         meals_df = pd.DataFrame(meals)
@@ -438,10 +594,22 @@ async def save_meals(meals: List[Dict[str, Any]] = Body(...)):
         if 'Date' in meals_df.columns:
             meals_df['Date'] = pd.to_datetime(meals_df['Date'], errors='coerce')
         
+        # Get the set of changed indices before saving
+        changed_indices = get_changed_indices()
+        
+        # Update Notion with only the changed rows
+        notion_updated = False
+        if changed_indices:
+            notion_updated = save_to_notion(meals_df, changed_indices)
+        
         # Save to CSV
         save_meals_to_csv(meals_df)
         
-        return {"status": "success", "message": "All meals saved successfully"}
+        return {
+            "status": "success", 
+            "message": "All meals saved successfully" + (" and updated in Notion" if notion_updated else ""),
+            "notionUpdated": notion_updated
+        }
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to save meals: {str(e)}")
