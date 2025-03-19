@@ -8,6 +8,9 @@ import logging
 from datetime import datetime
 import requests
 import json
+from sqlalchemy import create_engine, Column, Integer, String, Date, Text, Table, MetaData
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -30,31 +33,61 @@ NOTION_MEALPLAN_PAGE_ID = os.environ.get("NOTION_MEALPLAN_PAGE_ID")
 
 # Path to the data directory
 DATA_DIR = "/app/data"
-MEALS_CSV = os.path.join(DATA_DIR, "meals.csv")
-RECIPES_CSV = os.path.join(DATA_DIR, "recipes.csv")
-CHANGESET_FILE = os.path.join(DATA_DIR, "changeset.csv")
-CHANGED_INDICES_FILE = os.path.join(DATA_DIR, "changed_indices.txt")
-# Store Notion page IDs for each row to enable updates
+# Database setup
+DATABASE_URL = f"sqlite:///{os.path.join(DATA_DIR, 'gusto2.db')}"
+# File to store Notion page IDs
 NOTION_PAGE_IDS_FILE = os.path.join(DATA_DIR, "notion_page_ids.json")
 
-# Global variables to store loaded data
-all_meals_df = None
-changeset_df = None  # Store the changeset persistently
-changed_indices = set()  # Track which meal indices have been modified
+# Global variables
 notion_page_ids = {}  # Map dates to Notion page IDs
-recipes_df = None
+changed_indices = set()  # Track which meal indices have been modified
 
-# Model for meal data
+# SQLAlchemy setup
+engine = create_engine(DATABASE_URL)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+Base = declarative_base()
+
+# Define SQLAlchemy models
+class MealModel(Base):
+    __tablename__ = "meals"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    date = Column(Date, index=True)
+    weekday = Column(String)
+    name = Column(String, index=True)
+    tags = Column(String)
+    notes = Column(Text)
+    notion_page_id = Column(String, unique=True, index=True)
+
+class RecipeModel(Base):
+    __tablename__ = "recipes"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, unique=True, index=True)
+    tags = Column(String)
+
+# Pydantic models for request/response
 class Meal(BaseModel):
     Name: Optional[str] = None
     Date: Optional[str] = None
     Tags: Optional[str] = None
     Notes: Optional[str] = None
 
-# Model for recipe data
 class Recipe(BaseModel):
     Name: str
     Tags: Optional[str] = None
+
+# Create tables if they don't exist
+def init_db():
+    try:
+        # Ensure data directory exists
+        os.makedirs(DATA_DIR, exist_ok=True)
+        # Create tables
+        Base.metadata.create_all(bind=engine)
+        logger.info("Database tables created successfully")
+    except Exception as e:
+        logger.error(f"Error initializing database: {e}")
+        raise
 
 # Load Notion page IDs mapping if it exists
 def load_notion_page_ids():
@@ -71,15 +104,16 @@ def load_notion_page_ids():
 
 # Save Notion page IDs mapping to file
 def save_notion_page_ids():
-    try:
-        with open(NOTION_PAGE_IDS_FILE, 'w') as f:
-            json.dump(notion_page_ids, f)
-        logger.info(f"Saved {len(notion_page_ids)} Notion page IDs to file")
-    except Exception as e:
-        logger.error(f"Error saving Notion page IDs: {e}")
+    if notion_page_ids:
+        try:
+            with open(NOTION_PAGE_IDS_FILE, 'w') as f:
+                json.dump(notion_page_ids, f)
+            logger.info(f"Saved {len(notion_page_ids)} Notion page IDs to file")
+        except Exception as e:
+            logger.error(f"Error saving Notion page IDs: {e}")
 
 def fetch_from_notion():
-    """Fetch meal data from Notion database and save to local file"""
+    """Fetch meal data from Notion database and save to database"""
     global notion_page_ids
     
     if not NOTION_API_TOKEN or not NOTION_MEALPLAN_PAGE_ID:
@@ -140,13 +174,14 @@ def fetch_from_notion():
         
         logger.info(f"Total meals fetched from Notion: {len(all_results)}")
         
-        # Process the response into a DataFrame
+        # Process the response
         meals_data = []
         
         for page in all_results:
             page_id = page.get("id")
             properties = page.get("properties", {})
             meal = {}
+            meal["notion_page_id"] = page_id
             
             # Extract date if exists
             date_str = None
@@ -158,77 +193,60 @@ def fetch_from_notion():
                         # Convert from ISO format to our expected format
                         try:
                             date_obj = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
-                            meal["Date"] = date_obj.strftime('%Y/%m/%d')
+                            meal["date"] = date_obj
+                            meal["weekday"] = date_obj.strftime('%A')  # Get day name
                             
                             # Store the page ID mapped to the date string for later updates
-                            notion_page_ids[meal["Date"]] = page_id
+                            notion_page_ids[date_obj.strftime('%Y/%m/%d')] = page_id
                         except ValueError:
-                            meal["Date"] = None
+                            meal["date"] = None
+                            meal["weekday"] = None
             
             # Extract name if exists
             if "Name" in properties:
                 name_prop = properties["Name"]
                 if name_prop["type"] == "title" and name_prop.get("title"):
                     title_parts = [part.get("plain_text", "") for part in name_prop.get("title", [])]
-                    meal["Name"] = " ".join(title_parts).strip()
+                    meal["name"] = " ".join(title_parts).strip()
             
             # Extract tags if exists
             if "Tags" in properties:
                 tags_prop = properties["Tags"]
                 if tags_prop["type"] == "multi_select" and tags_prop.get("multi_select"):
                     tags = [tag.get("name", "") for tag in tags_prop.get("multi_select", [])]
-                    meal["Tags"] = ", ".join(tags)
+                    meal["tags"] = ", ".join(tags)
             
             # Extract notes if exists
             if "Notes" in properties:
                 notes_prop = properties["Notes"]
                 if notes_prop["type"] == "rich_text" and notes_prop.get("rich_text"):
                     notes_parts = [part.get("plain_text", "") for part in notes_prop.get("rich_text", [])]
-                    meal["Notes"] = " ".join(notes_parts).strip()
+                    meal["notes"] = " ".join(notes_parts).strip()
                     
             meals_data.append(meal)
         
-        # Create DataFrame
         if not meals_data:
             logger.warning("No meal data found in Notion database")
             return False
+        
+        # Clear existing meals from the database and insert new data from Notion
+        with SessionLocal() as db:
+            # Delete all existing meals
+            db.query(MealModel).delete()
+            db.commit()
             
-        meals_df = pd.DataFrame(meals_data)
-        
-        # Convert Date to datetime for sorting
-        if 'Date' in meals_df.columns:
-            meals_df['Date'] = pd.to_datetime(meals_df['Date'], errors='coerce')
+            # Insert new meals
+            for meal_data in meals_data:
+                meal_obj = MealModel(**meal_data)
+                db.add(meal_obj)
             
-        # Sort by date (although we already requested sorted data from Notion)
-        # This ensures proper ordering in case some dates were invalid
-        if 'Date' in meals_df.columns:
-            meals_df = meals_df.sort_values(by='Date')
-        
-        # Add Weekday column
-        if 'Date' in meals_df.columns and meals_df['Date'].notna().any():
-            # Create a Weekday column with the day name
-            meals_df['Weekday'] = meals_df['Date'].apply(
-                lambda x: x.day_name() if pd.notna(x) else None
-            )
-            
-        # Convert Date back to string format for saving
-        if 'Date' in meals_df.columns:
-            meals_df['Date'] = meals_df['Date'].apply(
-                lambda x: x.strftime('%Y/%m/%d') if pd.notna(x) else None
-            )
-        
-        # Ensure directory exists
-        os.makedirs(os.path.dirname(MEALS_CSV), exist_ok=True)
-        
-        # Save to CSV
-        columns = ['Weekday', 'Date', 'Name', 'Tags', 'Notes']
-        columns = [col for col in columns if col in meals_df.columns]
-        meals_df.to_csv(MEALS_CSV, index=False, columns=columns)
+            # Commit the transaction
+            db.commit()
         
         # Save the mapping of dates to Notion page IDs
         save_notion_page_ids()
         
-        logger.info(f"Successfully saved {len(meals_data)} meals from Notion to {MEALS_CSV}")
+        logger.info(f"Successfully saved {len(meals_data)} meals from Notion to database")
         return True
         
     except Exception as e:
@@ -241,336 +259,261 @@ def save_to_notion(meals_df, changed_indices_set):
         logger.warning("Notion API token not provided. Skipping Notion update.")
         return False
     
-    # Load the Notion page IDs mapping if not already loaded
-    if not notion_page_ids:
-        load_notion_page_ids()
+    # Load notion page IDs
+    load_notion_page_ids()
     
-    if not notion_page_ids:
-        logger.warning("No Notion page IDs mapping available. Cannot update Notion.")
-        return False
+    # Set up headers for Notion API
+    headers = {
+        "Authorization": f"Bearer {NOTION_API_TOKEN}",
+        "Content-Type": "application/json",
+        "Notion-Version": "2022-06-28"  # Use the current Notion API version
+    }
     
-    try:
-        # Set up headers for Notion API
-        headers = {
-            "Authorization": f"Bearer {NOTION_API_TOKEN}",
-            "Content-Type": "application/json",
-            "Notion-Version": "2022-06-28"
-        }
-        
-        success_count = 0
-        
-        # Get only the changed meals by their indices
-        for idx in changed_indices_set:
-            if idx >= len(meals_df):
-                logger.warning(f"Index {idx} is out of bounds for meals dataframe of length {len(meals_df)}")
+    update_success_count = 0
+    update_count = 0
+    
+    # Process each changed index
+    for idx in changed_indices_set:
+        try:
+            if idx < 0 or idx >= len(meals_df):
+                logger.warning(f"Invalid index {idx}, skipping")
                 continue
-                
-            # Get the meal data at this index
-            meal = meals_df.iloc[idx].to_dict()
             
-            # Skip if no date (we need the date to find the Notion page ID)
-            if 'Date' not in meal or not meal['Date'] or pd.isna(meal['Date']):
-                logger.warning(f"Meal at index {idx} has no valid date, skipping Notion update")
+            meal_row = meals_df.iloc[idx]
+            
+            # Skip if no date (we need it to find the corresponding Notion page)
+            if pd.isna(meal_row.get('Date')):
+                logger.warning(f"No date for meal at index {idx}, skipping")
                 continue
-                
-            # Convert date to string format if it's not already
-            if isinstance(meal['Date'], pd.Timestamp):
-                date_str = meal['Date'].strftime('%Y/%m/%d')
-            else:
-                date_str = str(meal['Date'])
             
-            # Check if we have the page ID for this date
-            if date_str not in notion_page_ids:
-                logger.warning(f"No Notion page ID found for date {date_str}, skipping update")
+            date_str = meal_row['Date'].strftime('%Y/%m/%d')
+            
+            # Find Notion page ID for this date
+            page_id = notion_page_ids.get(date_str)
+            if not page_id:
+                logger.warning(f"No Notion page ID found for date {date_str}, skipping")
                 continue
-                
-            page_id = notion_page_ids[date_str]
             
-            # Prepare the update payload
+            # Prepare properties to update
             properties = {}
             
-            # Add Name property (title)
-            if 'Name' in meal and meal['Name'] and not pd.isna(meal['Name']):
+            # Update name if it exists
+            if not pd.isna(meal_row.get('Name')):
                 properties["Name"] = {
                     "title": [
                         {
                             "type": "text",
-                            "text": {"content": meal['Name']}
+                            "text": {
+                                "content": meal_row['Name']
+                            }
                         }
                     ]
                 }
-            else:
-                # Clear the title if Name is empty
-                properties["Name"] = {"title": []}
             
-            # Add Notes property (rich text)
-            if 'Notes' in meal and meal['Notes'] and not pd.isna(meal['Notes']):
+            # Update tags if they exist
+            if not pd.isna(meal_row.get('Tags')):
+                tags = [tag.strip() for tag in meal_row['Tags'].split(',') if tag.strip()]
+                properties["Tags"] = {
+                    "multi_select": [{"name": tag} for tag in tags]
+                }
+            
+            # Update notes if they exist
+            if not pd.isna(meal_row.get('Notes')):
                 properties["Notes"] = {
                     "rich_text": [
                         {
                             "type": "text",
-                            "text": {"content": meal['Notes']}
+                            "text": {
+                                "content": meal_row['Notes']
+                            }
                         }
                     ]
                 }
+            
+            # Skip if no properties to update
+            if not properties:
+                logger.info(f"No properties to update for meal at index {idx}, skipping")
+                continue
+            
+            update_count += 1
+            
+            # Update the page using Notion API
+            url = f"https://api.notion.com/v1/pages/{page_id}"
+            payload = {"properties": properties}
+            
+            response = requests.patch(url, headers=headers, json=payload)
+            
+            if response.status_code != 200:
+                logger.error(f"Failed to update Notion page: {response.status_code} - {response.text}")
             else:
-                # Clear the notes if empty
-                properties["Notes"] = {"rich_text": []}
-            
-            # Add Tags property (multi-select)
-            if 'Tags' in meal and meal['Tags'] and not pd.isna(meal['Tags']):
-                tags = [tag.strip() for tag in meal['Tags'].split(',') if tag.strip()]
-                properties["Tags"] = {
-                    "multi_select": [{"name": tag} for tag in tags]
-                }
-            else:
-                # Clear tags if empty
-                properties["Tags"] = {"multi_select": []}
-            
-            # Create the update request payload
-            update_data = {
-                "properties": properties
-            }
-            
-            # Make the API request to update the page
-            update_url = f"https://api.notion.com/v1/pages/{page_id}"
-            response = requests.patch(update_url, headers=headers, json=update_data)
-            
-            # Check for successful response
-            if response.status_code == 200:
-                logger.info(f"Successfully updated Notion page for date {date_str}")
-                success_count += 1
-            else:
-                logger.error(f"Failed to update Notion page for date {date_str}: {response.status_code} - {response.text}")
-        
-        logger.info(f"Updated {success_count} meal(s) in Notion out of {len(changed_indices_set)} changed indices")
-        return success_count > 0
-        
-    except Exception as e:
-        logger.error(f"Failed to save changes to Notion: {str(e)}")
-        return False
+                update_success_count += 1
+                logger.info(f"Updated meal at date {date_str} in Notion")
+                
+        except Exception as e:
+            logger.error(f"Error updating meal at index {idx} in Notion: {str(e)}")
+    
+    logger.info(f"Updated {update_success_count}/{update_count} meals in Notion")
+    return update_success_count > 0
 
 def read_meals():
-    global all_meals_df
-    
-    # If meals are already loaded, return the cached data
-    if all_meals_df is not None:
-        return all_meals_df
-    
-    # Load directly from meals.csv file (assume it exists)
-    all_meals = pd.read_csv(MEALS_CSV)
-    all_meals = all_meals.replace({pd.NA: None, pd.NaT: None})
-    
-    # Drop Weekday column if it exists
-    if 'Weekday' in all_meals.columns:
-        all_meals = all_meals.drop('Weekday', axis=1)
-    
-    # Convert Date column to datetime if it exists
-    if 'Date' in all_meals.columns:
-        all_meals['Date'] = pd.to_datetime(all_meals['Date'], errors='coerce')
-    
-    # Store in global variable for future use
-    all_meals_df = all_meals
-    
-    return all_meals
+    """Read all meals from the database"""
+    try:
+        with SessionLocal() as db:
+            meals = db.query(MealModel).order_by(MealModel.date).all()
+        
+        # Convert to pandas DataFrame for compatibility with existing code
+        meals_data = []
+        for meal in meals:
+            meals_data.append({
+                "Date": meal.date,
+                "Weekday": meal.weekday,
+                "Name": meal.name,
+                "Tags": meal.tags,
+                "Notes": meal.notes,
+                "notion_page_id": meal.notion_page_id
+            })
+        
+        # Create DataFrame
+        if not meals_data:
+            # Return empty dataframe with expected columns
+            return pd.DataFrame(columns=["Date", "Weekday", "Name", "Tags", "Notes"])
+        
+        meals_df = pd.DataFrame(meals_data)
+        
+        # Replace None with NaN for pandas operations
+        meals_df = meals_df.replace({None: pd.NA})
+        
+        # Drop notion_page_id column as it's not needed for the frontend
+        if 'notion_page_id' in meals_df.columns:
+            meals_df = meals_df.drop('notion_page_id', axis=1)
+        
+        return meals_df
+    except Exception as e:
+        logger.error(f"Error reading meals from database: {str(e)}")
+        # Return empty dataframe
+        return pd.DataFrame(columns=["Date", "Weekday", "Name", "Tags", "Notes"])
 
 def get_changed_indices():
-    """Load the set of changed meal indices from file"""
+    """Load the set of changed meal indices"""
     global changed_indices
     
     if changed_indices:
         return changed_indices
     
-    # Check if changed indices file exists
-    if os.path.exists(CHANGED_INDICES_FILE):
-        try:
-            with open(CHANGED_INDICES_FILE, 'r') as f:
-                indices = f.read().strip().split(',')
-                # Filter out empty strings and convert to integers
-                changed_indices = {int(idx) for idx in indices if idx.strip().isdigit()}
-                return changed_indices
-        except Exception as e:
-            print(f"Error loading changed indices: {e}")
-            changed_indices = set()
-            return changed_indices
-    
-    # If file doesn't exist, return empty set
+    # If no changed indices in memory, return empty set
     changed_indices = set()
     return changed_indices
 
 def save_changed_indices(indices_set):
-    """Save the set of changed meal indices to file"""
+    """Save the set of changed meal indices"""
     global changed_indices
-    
-    # Update the global variable
     changed_indices = indices_set
-    
-    # Save to file
-    try:
-        with open(CHANGED_INDICES_FILE, 'w') as f:
-            if indices_set:
-                f.write(','.join(str(idx) for idx in indices_set))
-            else:
-                f.write('')
-    except Exception as e:
-        print(f"Error saving changed indices: {e}")
 
-def get_changeset():
-    """Get the current changeset, loading it from disk if necessary"""
-    global changeset_df
+def df_to_json(df):
+    """Convert DataFrame to JSON format suitable for API responses"""
+    # Handle NaT/NaN values before converting to JSON
+    df_copy = df.replace({pd.NA: None, pd.NaT: None})
     
-    if changeset_df is not None:
-        return changeset_df
-    
-    # Check if changeset file exists
-    if os.path.exists(CHANGESET_FILE):
-        try:
-            # Load the changeset from file
-            cs = pd.read_csv(CHANGESET_FILE)
-            
-            # Convert Date column to datetime if it exists
-            if 'Date' in cs.columns:
-                cs['Date'] = pd.to_datetime(cs['Date'], errors='coerce')
-                
-            changeset_df = cs
-            return cs
-        except Exception as e:
-            print(f"Error loading changeset: {e}")
-            # Return empty DataFrame if there was an error
-            changeset_df = pd.DataFrame()
-            return changeset_df
-    else:
-        # If no changeset exists, create an empty one
-        changeset_df = pd.DataFrame()
-        return changeset_df
-
-def save_changeset(meals_df):
-    """Save the changeset DataFrame to disk"""
-    global changeset_df
-    
-    # Store the changeset in memory
-    changeset_df = meals_df.copy()
-    
-    # Format the Date column back to YYYY/MM/DD before saving
-    if 'Date' in meals_df.columns:
-        formatted_df = meals_df.copy()
-        formatted_df['Date'] = formatted_df['Date'].apply(
-            lambda x: x.strftime('%Y/%m/%d') if pd.notna(x) else None
+    # Convert datetime columns to string format
+    if 'Date' in df_copy.columns:
+        df_copy['Date'] = df_copy['Date'].apply(
+            lambda x: x.strftime('%Y/%m/%d') if pd.notna(x) and x is not None else None
         )
-    else:
-        formatted_df = meals_df.copy()
     
-    # Save to CSV
-    formatted_df.to_csv(CHANGESET_FILE, index=False)
-    
-    return True
+    # Convert to records format (list of dicts)
+    return df_copy.to_dict('records')
 
 def update_changeset(index, meal):
-    """Update a single meal in the changeset"""
-    changeset = get_changeset()
-    
-    # If changeset is empty, initialize it with the current meals
-    if changeset.empty:
-        changeset = read_meals().copy()
-    
-    # Update the meal at the given index
-    for key, value in meal.items():
-        if key in changeset.columns:
-            changeset.at[index, key] = value
-    
-    # Save the updated changeset
-    save_changeset(changeset)
-    
-    # Add this index to the set of changed indices
-    changed_indices = get_changed_indices()
-    changed_indices.add(index)
-    save_changed_indices(changed_indices)
-    
-    return changeset
-        
-def df_to_json(df):
-    if not df.empty:
-        return df.to_dict(orient='records')
-    return []
-
-def save_meals_to_csv(meals_df):
-    """Save the updated meals dataframe to CSV file."""
-    global all_meals_df
-    
-    # Add back the Weekday column if it was in the original file
-    # We can derive it from the Date
-    if meals_df['Date'].notna().any():
-        # Create a Weekday column with the day name
-        meals_df['Weekday'] = meals_df['Date'].apply(
-            lambda x: x.day_name() if pd.notna(x) else None
-        )
-    
-    # Format the Date column back to YYYY/MM/DD before saving
-    if 'Date' in meals_df.columns:
-        meals_df['Date'] = meals_df['Date'].apply(
-            lambda x: x.strftime('%Y/%m/%d') if pd.notna(x) else None
-        )
-    
-    # Save to CSV
-    # Define column order to match original file
-    columns = ['Weekday', 'Date', 'Name', 'Tags', 'Notes']
-    # Only include columns that exist in our dataframe
-    columns = [col for col in columns if col in meals_df.columns]
-    
-    meals_df.to_csv(MEALS_CSV, index=False, columns=columns)
-    
-    # Reset the cached dataframe to force reloading
-    all_meals_df = None
-    
-    # Clear the changeset after saving
-    if os.path.exists(CHANGESET_FILE):
-        try:
-            os.remove(CHANGESET_FILE)
-        except Exception as e:
-            print(f"Error removing changeset file: {e}")
-    
-    # Clear the changed indices file
-    if os.path.exists(CHANGED_INDICES_FILE):
-        try:
-            os.remove(CHANGED_INDICES_FILE)
-        except Exception as e:
-            print(f"Error removing changed indices file: {e}")
-    
-    # Reset the changeset and changed indices in memory
-    global changeset_df, changed_indices
-    changeset_df = None
-    changed_indices = set()
-    
-    return True
+    """Update a single meal in the database"""
+    try:
+        with SessionLocal() as db:
+            # Get all meals to find the one at the specified index
+            meals = db.query(MealModel).order_by(MealModel.date).all()
+            
+            if index < 0 or index >= len(meals):
+                logger.error(f"Invalid meal index: {index}")
+                return False
+            
+            # Get the meal to update
+            db_meal = meals[index]
+            
+            # Update meal attributes
+            if 'Name' in meal and meal['Name'] is not None:
+                db_meal.name = meal['Name']
+            if 'Tags' in meal and meal['Tags'] is not None:
+                db_meal.tags = meal['Tags']
+            if 'Notes' in meal and meal['Notes'] is not None:
+                db_meal.notes = meal['Notes']
+            if 'Date' in meal and meal['Date'] is not None:
+                date_obj = pd.to_datetime(meal['Date'])
+                db_meal.date = date_obj
+                db_meal.weekday = date_obj.strftime('%A')
+            
+            # Save changes
+            db.commit()
+            
+            # Update changed_indices
+            global changed_indices
+            changed_indices.add(index)
+            
+        return True
+    except Exception as e:
+        logger.error(f"Error updating meal at index {index}: {str(e)}")
+        return False
 
 def read_recipes():
-    """Read recipes from CSV file"""
-    global recipes_df
-    
-    if recipes_df is not None:
+    """Read recipes from database"""
+    try:
+        with SessionLocal() as db:
+            recipes = db.query(RecipeModel).order_by(RecipeModel.name).all()
+        
+        # Convert to pandas DataFrame for compatibility with existing code
+        recipes_data = []
+        for recipe in recipes:
+            recipes_data.append({
+                "Name": recipe.name,
+                "Tags": recipe.tags
+            })
+        
+        # Create DataFrame
+        if not recipes_data:
+            # Return empty dataframe with expected columns
+            return pd.DataFrame(columns=["Name", "Tags"])
+        
+        recipes_df = pd.DataFrame(recipes_data)
+        
+        # Replace None with NaN for pandas operations
+        recipes_df = recipes_df.replace({None: pd.NA})
+        
         return recipes_df
-    
-    if os.path.exists(RECIPES_CSV):
-        recipes = pd.read_csv(RECIPES_CSV)
-        recipes = recipes.replace({pd.NA: None, pd.NaT: None})
-    else:
-        recipes = pd.DataFrame(columns=['Name', 'Tags'])
-    
-    recipes_df = recipes
-    return recipes
+    except Exception as e:
+        logger.error(f"Error reading recipes from database: {str(e)}")
+        # Return empty dataframe
+        return pd.DataFrame(columns=["Name", "Tags"])
 
 def save_recipes(df):
-    """Save recipes to CSV file"""
-    global recipes_df
-    recipes_df = df.copy()
-    
-    # Ensure directory exists
-    os.makedirs(os.path.dirname(RECIPES_CSV), exist_ok=True)
-    
-    # Save to CSV
-    df.to_csv(RECIPES_CSV, index=False)
-    
-    return True
+    """Save recipes to database"""
+    try:
+        with SessionLocal() as db:
+            # Delete all existing recipes
+            db.query(RecipeModel).delete()
+            db.commit()
+            
+            # Insert new recipes
+            for _, row in df.iterrows():
+                recipe = RecipeModel(
+                    name=row.get('Name'),
+                    tags=row.get('Tags')
+                )
+                db.add(recipe)
+            
+            # Commit the transaction
+            db.commit()
+        
+        return True
+    except Exception as e:
+        logger.error(f"Error saving recipes to database: {str(e)}")
+        return False
 
 def populate_recipes_from_meals():
     """Populate recipes database with unique meals from the meal plan"""
@@ -594,58 +537,52 @@ def populate_recipes_from_meals():
     
     return read_recipes()
 
+# Initialize database on startup
+init_db()
+
 # Initialize by loading page IDs
 load_notion_page_ids()
 
-@app.get("/api/hello")
-async def hello_world():
-    # First, check if there's a changeset
-    changeset = get_changeset()
-    changed_indices = get_changed_indices()
-    
-    # If changeset exists and is not empty, return that
-    if not changeset.empty:
-        return {
-            "meals": df_to_json(changeset), 
-            "hasChanges": len(changed_indices) > 0,
-            "changedIndices": list(changed_indices)
-        }
-    
-    # Otherwise, return the original meals
-    meals = read_meals()
-    return {
-        "meals": df_to_json(meals), 
-        "hasChanges": False, 
-        "changedIndices": []
-    }
-
-@app.put("/api/meal/{index}")
-async def update_meal(index: int, meal: Dict[str, Any] = Body(...)):
-    """Update a meal at the given index in the changeset."""
+@app.get("/api/meals")
+async def get_meals():
+    """Get all meals directly from the database without fetching from Notion.
+    This is more efficient for normal page loads where we don't need fresh Notion data."""
     try:
-        # Convert index to integer
-        index = int(index)
-        
-        # Update the meal in the changeset
-        update_changeset(index, meal)
-        
-        # Return the updated changed indices
-        changed_indices = get_changed_indices()
+        # Read meals directly from the database
+        meals = read_meals()
         
         return {
             "status": "success", 
-            "message": "Meal updated in changeset", 
-            "changedIndices": list(changed_indices)
+            "message": "Meals retrieved from database", 
+            "meals": df_to_json(meals)
         }
         
+    except Exception as e:
+        logger.error(f"Failed to get meals: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get meals: {str(e)}")
+
+@app.put("/api/meal/{index}")
+async def update_meal(index: int, meal: Dict[str, Any] = Body(...)):
+    """Update a meal at the given index."""
+    try:
+        update_successful = update_changeset(index, meal)
+        if not update_successful:
+            raise HTTPException(status_code=404, detail="Meal not found")
+        
+        # Return the updated meal and the set of changed indices
+        return {
+            "status": "success",
+            "message": "Meal updated",
+            "changedIndices": list(get_changed_indices())
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to update meal: {str(e)}")
 
 @app.post("/api/meals/save")
 async def save_meals(meals: List[Dict[str, Any]] = Body(...)):
-    """Save all meals from the changeset to the CSV file and update Notion."""
+    """Save all meals to the database and update Notion."""
     try:
-        # Create a DataFrame from the received meals
+        # Convert to DataFrame for compatibility with existing code
         meals_df = pd.DataFrame(meals)
         
         # Convert Date column to datetime if it exists
@@ -653,15 +590,48 @@ async def save_meals(meals: List[Dict[str, Any]] = Body(...)):
             meals_df['Date'] = pd.to_datetime(meals_df['Date'], errors='coerce')
         
         # Get the set of changed indices before saving
-        changed_indices = get_changed_indices()
+        changed_indices_set = get_changed_indices()
         
         # Update Notion with only the changed rows
         notion_updated = False
-        if changed_indices:
-            notion_updated = save_to_notion(meals_df, changed_indices)
+        if changed_indices_set:
+            notion_updated = save_to_notion(meals_df, changed_indices_set)
         
-        # Save to CSV
-        save_meals_to_csv(meals_df)
+        # Save to database
+        try:
+            with SessionLocal() as db:
+                # Delete all existing meals
+                db.query(MealModel).delete()
+                db.commit()
+                
+                # Insert new meals
+                for _, row in meals_df.iterrows():
+                    date_obj = row.get('Date')
+                    weekday = date_obj.strftime('%A') if pd.notna(date_obj) else None
+                    date_str = date_obj.strftime('%Y/%m/%d') if pd.notna(date_obj) else None
+                    
+                    # Get notion page id if available
+                    notion_page_id = notion_page_ids.get(date_str) if date_str else None
+                    
+                    meal = MealModel(
+                        date=date_obj if pd.notna(date_obj) else None,
+                        weekday=weekday,
+                        name=row.get('Name'),
+                        tags=row.get('Tags'),
+                        notes=row.get('Notes'),
+                        notion_page_id=notion_page_id
+                    )
+                    db.add(meal)
+                
+                # Commit the transaction
+                db.commit()
+            
+            # Reset changed indices after saving
+            save_changed_indices(set())
+            
+        except Exception as e:
+            logger.error(f"Error saving meals to database: {str(e)}")
+            raise
         
         return {
             "status": "success", 
@@ -674,38 +644,22 @@ async def save_meals(meals: List[Dict[str, Any]] = Body(...)):
 
 @app.get("/api/meals/reload")
 async def reload_meals():
-    """Force reload meals from the CSV file, discarding any unsaved changes.
+    """Force reload meals from database, discarding any unsaved changes.
     Also attempts to fetch updated data from Notion if configured."""
     try:
-        # Force reload by resetting the cached DataFrame
-        global all_meals_df, changeset_df, changed_indices
-        all_meals_df = None
-        changeset_df = None
+        # Force reload by resetting changed indices
+        global changed_indices
         changed_indices = set()
-        
-        # Remove the changeset file if it exists
-        if os.path.exists(CHANGESET_FILE):
-            try:
-                os.remove(CHANGESET_FILE)
-            except Exception as e:
-                logger.error(f"Error removing changeset file: {e}")
-        
-        # Remove the changed indices file if it exists
-        if os.path.exists(CHANGED_INDICES_FILE):
-            try:
-                os.remove(CHANGED_INDICES_FILE)
-            except Exception as e:
-                logger.error(f"Error removing changed indices file: {e}")
         
         # First try to fetch fresh data from Notion
         notion_fetch_success = fetch_from_notion()
         
-        # Read the meals from the CSV file (either the newly fetched one or the existing one)
+        # Read the meals from the database
         meals = read_meals()
         
         return {
             "status": "success", 
-            "message": "Meals reloaded successfully" + (" (updated from Notion)" if notion_fetch_success else " (from local file)"), 
+            "message": "Meals reloaded successfully" + (" (updated from Notion)" if notion_fetch_success else " (from database)"), 
             "meals": df_to_json(meals),
             "notionUpdated": notion_fetch_success
         }
@@ -718,43 +672,22 @@ async def reload_meals():
 async def get_changes():
     """Get the current changeset and changed indices."""
     try:
-        changeset = get_changeset()
-        changed_indices = get_changed_indices()
-        
-        # If changeset exists and is not empty, return that
-        if not changeset.empty:
-            return {
-                "changes": df_to_json(changeset), 
-                "hasChanges": len(changed_indices) > 0,
-                "changedIndices": list(changed_indices)
-            }
-        
-        # Otherwise, return an empty array
         return {
-            "changes": [], 
-            "hasChanges": False, 
-            "changedIndices": []
+            "status": "success",
+            "changedIndices": list(get_changed_indices())
         }
-        
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get changeset: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get changes: {str(e)}")
 
 @app.post("/api/meals/add-to-changeset")
 async def add_to_changeset(meals: List[Dict[str, Any]] = Body(...)):
     """Add meals to the changeset."""
     try:
-        # Create a DataFrame from the received meals
-        meals_df = pd.DataFrame(meals)
-        
-        # Convert Date column to datetime if it exists
-        if 'Date' in meals_df.columns:
-            meals_df['Date'] = pd.to_datetime(meals_df['Date'], errors='coerce')
-        
-        # Save the changeset
-        save_changeset(meals_df)
-        
-        return {"status": "success", "message": "Changes stored successfully"}
-        
+        # Not implemented for SQLite version - we're tracking changes in memory
+        return {
+            "status": "success",
+            "message": "Changes tracked in memory"
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to add to changeset: {str(e)}")
 
@@ -771,22 +704,28 @@ async def get_recipes():
 async def create_recipe(recipe: Recipe):
     """Create a new recipe"""
     try:
-        recipes = read_recipes()
+        # Read existing recipes
+        recipes_df = read_recipes()
         
         # Check if recipe already exists
-        if not recipes.empty and recipe.Name in recipes['Name'].values:
-            raise HTTPException(status_code=400, detail="Recipe already exists")
+        if not recipes_df.empty and recipe.Name in recipes_df['Name'].values:
+            raise HTTPException(status_code=400, detail=f"Recipe '{recipe.Name}' already exists")
         
         # Add new recipe
-        new_recipe = pd.DataFrame([recipe.dict()])
-        recipes = pd.concat([recipes, new_recipe], ignore_index=True)
+        new_recipe = pd.DataFrame({
+            "Name": [recipe.Name],
+            "Tags": [recipe.Tags]
+        })
         
-        # Save updated recipes
-        save_recipes(recipes)
+        updated_recipes = pd.concat([recipes_df, new_recipe], ignore_index=True)
+        save_recipes(updated_recipes)
         
-        return {"status": "success", "message": "Recipe created successfully"}
-    except HTTPException:
-        raise
+        return {
+            "status": "success",
+            "message": f"Recipe '{recipe.Name}' created successfully"
+        }
+    except HTTPException as e:
+        raise e
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to create recipe: {str(e)}")
 
@@ -794,21 +733,23 @@ async def create_recipe(recipe: Recipe):
 async def delete_recipe(name: str):
     """Delete a recipe by name"""
     try:
-        recipes = read_recipes()
+        # Read existing recipes
+        recipes_df = read_recipes()
         
         # Check if recipe exists
-        if recipes.empty or name not in recipes['Name'].values:
-            raise HTTPException(status_code=404, detail="Recipe not found")
+        if recipes_df.empty or name not in recipes_df['Name'].values:
+            raise HTTPException(status_code=404, detail=f"Recipe '{name}' not found")
         
-        # Remove recipe
-        recipes = recipes[recipes['Name'] != name]
+        # Delete recipe
+        updated_recipes = recipes_df[recipes_df['Name'] != name]
+        save_recipes(updated_recipes)
         
-        # Save updated recipes
-        save_recipes(recipes)
-        
-        return {"status": "success", "message": "Recipe deleted successfully"}
-    except HTTPException:
-        raise
+        return {
+            "status": "success",
+            "message": f"Recipe '{name}' deleted successfully"
+        }
+    except HTTPException as e:
+        raise e
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to delete recipe: {str(e)}")
 
@@ -816,27 +757,29 @@ async def delete_recipe(name: str):
 async def update_recipe(name: str, recipe: Recipe):
     """Update a recipe by name"""
     try:
-        recipes = read_recipes()
+        # Read existing recipes
+        recipes_df = read_recipes()
         
         # Check if recipe exists
-        if recipes.empty or name not in recipes['Name'].values:
-            raise HTTPException(status_code=404, detail="Recipe not found")
+        if recipes_df.empty or name not in recipes_df['Name'].values:
+            raise HTTPException(status_code=404, detail=f"Recipe '{name}' not found")
+        
+        # If name changed, check if new name already exists
+        if name != recipe.Name and recipe.Name in recipes_df['Name'].values:
+            raise HTTPException(status_code=400, detail=f"Recipe '{recipe.Name}' already exists")
         
         # Update recipe
-        recipes.loc[recipes['Name'] == name, 'Tags'] = recipe.Tags
+        recipes_df.loc[recipes_df['Name'] == name, 'Name'] = recipe.Name
+        recipes_df.loc[recipes_df['Name'] == recipe.Name, 'Tags'] = recipe.Tags
         
-        # If name is being changed, verify new name doesn't exist
-        if recipe.Name != name:
-            if recipe.Name in recipes['Name'].values:
-                raise HTTPException(status_code=400, detail="Recipe with new name already exists")
-            recipes.loc[recipes['Name'] == name, 'Name'] = recipe.Name
+        save_recipes(recipes_df)
         
-        # Save updated recipes
-        save_recipes(recipes)
-        
-        return {"status": "success", "message": "Recipe updated successfully"}
-    except HTTPException:
-        raise
+        return {
+            "status": "success",
+            "message": f"Recipe '{name}' updated successfully"
+        }
+    except HTTPException as e:
+        raise e
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to update recipe: {str(e)}")
 

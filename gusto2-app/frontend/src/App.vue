@@ -199,7 +199,7 @@ export default {
       this.loading = true;
       this.error = null;
       try {
-        const response = await axios.get('/api/hello');
+        const response = await axios.get('/api/meals');
         if (response.data && response.data.meals && response.data.meals.length > 0) {
           this.meals = response.data.meals;
           
