@@ -125,8 +125,9 @@ def fetch_from_notion():
                             meal["date"] = date_obj
                             meal["weekday"] = date_obj.strftime('%A')  # Get day name
                             
-                            # Store the page ID mapped to the date string for later updates
-                            database.notion_page_ids[date_obj.strftime('%Y/%m/%d')] = page_id
+                            # Store the page ID in database
+                            formatted_date = date_obj.strftime('%Y/%m/%d')
+                            database.save_notion_page_id(formatted_date, page_id)
                         except ValueError:
                             meal["date"] = None
                             meal["weekday"] = None
@@ -172,9 +173,6 @@ def fetch_from_notion():
             # Commit the transaction
             db.commit()
         
-        # Save the mapping of dates to Notion page IDs
-        database.save_notion_page_ids()
-        
         logger.info(f"Successfully saved {len(meals_data)} meals from Notion to database")
         return True
         
@@ -187,9 +185,6 @@ def save_to_notion(meals_df, changed_indices_set):
     if not NOTION_API_TOKEN:
         logger.warning("Notion API token not provided. Skipping Notion update.")
         return False
-    
-    # Load notion page IDs
-    database.load_notion_page_ids()
     
     # Set up headers for Notion API
     headers = {
@@ -218,7 +213,7 @@ def save_to_notion(meals_df, changed_indices_set):
             date_str = meal_row['Date'].strftime('%Y/%m/%d')
             
             # Find Notion page ID for this date
-            page_id = database.notion_page_ids.get(date_str)
+            page_id = database.get_notion_page_id(date_str)
             if not page_id:
                 logger.warning(f"No Notion page ID found for date {date_str}, skipping")
                 continue
@@ -287,7 +282,7 @@ def save_to_notion(meals_df, changed_indices_set):
 # Initialize database on startup
 database.init_db()
 
-# Initialize by loading page IDs
+# Initialize by loading page IDs from database
 database.load_notion_page_ids()
 
 @app.get("/api/meals")

@@ -29,14 +29,12 @@ logger.info(f"Using data directory: {DATA_DIR}")
 
 # Database setup
 DATABASE_URL = f"sqlite:///{os.path.join(DATA_DIR, 'gusto2.db')}"
-# File to store Notion page IDs
-NOTION_PAGE_IDS_FILE = os.path.join(DATA_DIR, "notion_page_ids.json")
 
 # Log database location
 logger.info(f"Database URL: {DATABASE_URL}")
 
 # Global variables
-notion_page_ids = {}  # Map dates to Notion page IDs
+notion_page_ids = {}  # Map dates to Notion page IDs (in-memory cache)
 changed_indices = set()  # Track which meal indices have been modified
 
 # SQLAlchemy setup
@@ -54,7 +52,7 @@ class MealModel(Base):
     name = Column(String, index=True)
     tags = Column(String)
     notes = Column(Text)
-    notion_page_id = Column(String, unique=True, index=True)
+    notion_page_id = Column(String, index=True)
 
 class RecipeModel(Base):
     __tablename__ = "recipes"
@@ -62,6 +60,13 @@ class RecipeModel(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, unique=True, index=True)
     tags = Column(String)
+
+class NotionPageIdModel(Base):
+    __tablename__ = "notion_page_ids"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    date_str = Column(String, unique=True, index=True)
+    page_id = Column(String, index=True)
 
 # Create tables if they don't exist
 def init_db():
@@ -73,28 +78,95 @@ def init_db():
         logger.error(f"Error initializing database: {e}")
         raise
 
-# Load Notion page IDs mapping if it exists
+# Load Notion page IDs from database to in-memory cache
 def load_notion_page_ids():
     global notion_page_ids
-    if os.path.exists(NOTION_PAGE_IDS_FILE):
-        try:
-            with open(NOTION_PAGE_IDS_FILE, 'r') as f:
-                notion_page_ids = json.load(f)
-            logger.info(f"Loaded {len(notion_page_ids)} Notion page IDs from file")
-        except Exception as e:
-            logger.error(f"Error loading Notion page IDs: {e}")
-            notion_page_ids = {}
+    try:
+        with SessionLocal() as db:
+            page_id_records = db.query(NotionPageIdModel).all()
+            
+            # Populate in-memory cache
+            notion_page_ids = {record.date_str: record.page_id for record in page_id_records}
+            
+        logger.info(f"Loaded {len(notion_page_ids)} Notion page IDs from database")
+    except Exception as e:
+        logger.error(f"Error loading Notion page IDs from database: {e}")
+        notion_page_ids = {}
+    
     return notion_page_ids
 
-# Save Notion page IDs mapping to file
+# Save Notion page ID to database
+def save_notion_page_id(date_str, page_id):
+    try:
+        with SessionLocal() as db:
+            # Check if record exists
+            existing = db.query(NotionPageIdModel).filter_by(date_str=date_str).first()
+            
+            if existing:
+                # Update existing record
+                existing.page_id = page_id
+            else:
+                # Create new record
+                new_record = NotionPageIdModel(date_str=date_str, page_id=page_id)
+                db.add(new_record)
+            
+            db.commit()
+            
+            # Update in-memory cache
+            global notion_page_ids
+            notion_page_ids[date_str] = page_id
+            
+        return True
+    except Exception as e:
+        logger.error(f"Error saving Notion page ID for date {date_str}: {e}")
+        return False
+
+# Save all Notion page IDs to database
 def save_notion_page_ids():
-    if notion_page_ids:
-        try:
-            with open(NOTION_PAGE_IDS_FILE, 'w') as f:
-                json.dump(notion_page_ids, f)
-            logger.info(f"Saved {len(notion_page_ids)} Notion page IDs to file")
-        except Exception as e:
-            logger.error(f"Error saving Notion page IDs: {e}")
+    if not notion_page_ids:
+        return
+    
+    try:
+        with SessionLocal() as db:
+            # For each page ID in memory
+            for date_str, page_id in notion_page_ids.items():
+                # Check if record exists
+                existing = db.query(NotionPageIdModel).filter_by(date_str=date_str).first()
+                
+                if existing:
+                    # Update existing record
+                    existing.page_id = page_id
+                else:
+                    # Create new record
+                    new_record = NotionPageIdModel(date_str=date_str, page_id=page_id)
+                    db.add(new_record)
+            
+            db.commit()
+            
+        logger.info(f"Saved {len(notion_page_ids)} Notion page IDs to database")
+        return True
+    except Exception as e:
+        logger.error(f"Error saving Notion page IDs to database: {e}")
+        return False
+
+# Get Notion page ID for a specific date
+def get_notion_page_id(date_str):
+    # First check in-memory cache
+    if date_str in notion_page_ids:
+        return notion_page_ids[date_str]
+    
+    # If not in cache, try to load from database
+    try:
+        with SessionLocal() as db:
+            record = db.query(NotionPageIdModel).filter_by(date_str=date_str).first()
+            if record:
+                # Update in-memory cache and return
+                notion_page_ids[date_str] = record.page_id
+                return record.page_id
+    except Exception as e:
+        logger.error(f"Error getting Notion page ID for date {date_str}: {e}")
+    
+    return None
 
 def read_meals():
     """Read all meals from the database"""
@@ -293,7 +365,7 @@ def save_meals_to_db(meals_df):
                 date_str = date_obj.strftime('%Y/%m/%d') if pd.notna(date_obj) else None
                 
                 # Get notion page id if available
-                notion_page_id = notion_page_ids.get(date_str) if date_str else None
+                notion_page_id = get_notion_page_id(date_str) if date_str else None
                 
                 meal = MealModel(
                     date=date_obj if pd.notna(date_obj) else None,
