@@ -35,7 +35,6 @@ logger.info(f"Database URL: {DATABASE_URL}")
 
 # Global variables
 notion_page_ids = {}  # Map dates to Notion page IDs (in-memory cache)
-changed_indices = set()  # Track which meal indices have been modified
 
 # SQLAlchemy setup
 engine = create_engine(DATABASE_URL)
@@ -68,10 +67,17 @@ class NotionPageIdModel(Base):
     date_str = Column(String, unique=True, index=True)
     page_id = Column(String, index=True)
 
+class ChangedIndexModel(Base):
+    __tablename__ = "changed_indices"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    index = Column(Integer, unique=True, index=True)
+
 # Create tables if they don't exist
 def init_db():
     try:
-        # Create tables
+        # Drop and recreate all tables
+        Base.metadata.drop_all(bind=engine)
         Base.metadata.create_all(bind=engine)
         logger.info("Database tables created successfully")
     except Exception as e:
@@ -207,20 +213,32 @@ def read_meals():
         return pd.DataFrame(columns=["Date", "Weekday", "Name", "Tags", "Notes"])
 
 def get_changed_indices():
-    """Load the set of changed meal indices"""
-    global changed_indices
-    
-    if changed_indices:
-        return changed_indices
-    
-    # If no changed indices in memory, return empty set
-    changed_indices = set()
-    return changed_indices
+    """Load the set of changed meal indices from the database"""
+    try:
+        with SessionLocal() as db:
+            changed_indices_records = db.query(ChangedIndexModel).all()
+            return {record.index for record in changed_indices_records}
+    except Exception as e:
+        logger.error(f"Error loading changed indices from database: {e}")
+        return set()
 
 def save_changed_indices(indices_set):
-    """Save the set of changed meal indices"""
-    global changed_indices
-    changed_indices = indices_set
+    """Save the set of changed meal indices to the database"""
+    try:
+        with SessionLocal() as db:
+            # Delete all existing changed indices
+            db.query(ChangedIndexModel).delete()
+            
+            # Add new indices
+            for index in indices_set:
+                db.add(ChangedIndexModel(index=index))
+            
+            db.commit()
+            
+        return True
+    except Exception as e:
+        logger.error(f"Error saving changed indices to database: {e}")
+        return False
 
 def df_to_json(df):
     """Convert DataFrame to JSON format suitable for API responses"""
@@ -258,16 +276,23 @@ def update_changeset(index, meal):
             if 'Notes' in meal and meal['Notes'] is not None:
                 db_meal.notes = meal['Notes']
             if 'Date' in meal and meal['Date'] is not None:
-                date_obj = pd.to_datetime(meal['Date'])
-                db_meal.date = date_obj
-                db_meal.weekday = date_obj.strftime('%A')
+                try:
+                    # Try to parse the date consistently
+                    if isinstance(meal['Date'], str):
+                        date_obj = pd.to_datetime(meal['Date'], format='%Y/%m/%d')
+                    else:
+                        date_obj = pd.to_datetime(meal['Date'])
+                    db_meal.date = date_obj
+                    db_meal.weekday = date_obj.strftime('%A')
+                except Exception as e:
+                    logger.error(f"Error parsing date {meal['Date']}: {e}")
+                    return False
+            
+            # Add index to changed_indices table
+            db.merge(ChangedIndexModel(index=index))
             
             # Save changes
             db.commit()
-            
-            # Update changed_indices
-            global changed_indices
-            changed_indices.add(index)
             
         return True
     except Exception as e:
@@ -360,19 +385,39 @@ def save_meals_to_db(meals_df):
             
             # Insert new meals
             for _, row in meals_df.iterrows():
-                date_obj = row.get('Date')
-                weekday = date_obj.strftime('%A') if pd.notna(date_obj) else None
-                date_str = date_obj.strftime('%Y/%m/%d') if pd.notna(date_obj) else None
+                date_obj = None
+                weekday = None
+                date_str = None
+                
+                # Handle date conversion
+                if 'Date' in row and pd.notna(row['Date']) and not pd.isna(row['Date']):
+                    try:
+                        # Try to parse the date - it might be a string or already a datetime
+                        if isinstance(row['Date'], str):
+                            date_obj = pd.to_datetime(row['Date'], format='%Y/%m/%d')
+                        else:
+                            date_obj = pd.to_datetime(row['Date'])
+                            
+                        weekday = date_obj.strftime('%A')
+                        date_str = date_obj.strftime('%Y/%m/%d')
+                    except Exception as e:
+                        logger.error(f"Error parsing date {row['Date']}: {e}")
+                        continue
                 
                 # Get notion page id if available
                 notion_page_id = get_notion_page_id(date_str) if date_str else None
                 
+                # Handle NaN/NaT values for other fields
+                name = row.get('Name') if pd.notna(row.get('Name')) else None
+                tags = row.get('Tags') if pd.notna(row.get('Tags')) else None
+                notes = row.get('Notes') if pd.notna(row.get('Notes')) else None
+                
                 meal = MealModel(
-                    date=date_obj if pd.notna(date_obj) else None,
+                    date=date_obj,
                     weekday=weekday,
-                    name=row.get('Name'),
-                    tags=row.get('Tags'),
-                    notes=row.get('Notes'),
+                    name=name,
+                    tags=tags,
+                    notes=notes,
                     notion_page_id=notion_page_id
                 )
                 db.add(meal)

@@ -206,11 +206,20 @@ def save_to_notion(meals_df, changed_indices_set):
             meal_row = meals_df.iloc[idx]
             
             # Skip if no date (we need it to find the corresponding Notion page)
-            if pd.isna(meal_row.get('Date')):
+            if pd.isna(meal_row.get('Date')) or pd.isnull(meal_row.get('Date')):
                 logger.warning(f"No date for meal at index {idx}, skipping")
                 continue
             
-            date_str = meal_row['Date'].strftime('%Y/%m/%d')
+            # Handle date formatting
+            try:
+                if isinstance(meal_row['Date'], str):
+                    date_obj = pd.to_datetime(meal_row['Date'], format='%Y/%m/%d')
+                else:
+                    date_obj = pd.to_datetime(meal_row['Date'])
+                date_str = date_obj.strftime('%Y/%m/%d')
+            except Exception as e:
+                logger.error(f"Error parsing date for index {idx}: {e}")
+                continue
             
             # Find Notion page ID for this date
             page_id = database.get_notion_page_id(date_str)
@@ -221,34 +230,34 @@ def save_to_notion(meals_df, changed_indices_set):
             # Prepare properties to update
             properties = {}
             
-            # Update name if it exists
+            # Update name if it exists and is not NaN
             if not pd.isna(meal_row.get('Name')):
                 properties["Name"] = {
                     "title": [
                         {
                             "type": "text",
                             "text": {
-                                "content": meal_row['Name']
+                                "content": str(meal_row['Name'])
                             }
                         }
                     ]
                 }
             
-            # Update tags if they exist
+            # Update tags if they exist and are not NaN
             if not pd.isna(meal_row.get('Tags')):
-                tags = [tag.strip() for tag in meal_row['Tags'].split(',') if tag.strip()]
+                tags = [tag.strip() for tag in str(meal_row['Tags']).split(',') if tag.strip()]
                 properties["Tags"] = {
                     "multi_select": [{"name": tag} for tag in tags]
                 }
             
-            # Update notes if they exist
+            # Update notes if they exist and are not NaN
             if not pd.isna(meal_row.get('Notes')):
                 properties["Notes"] = {
                     "rich_text": [
                         {
                             "type": "text",
                             "text": {
-                                "content": meal_row['Notes']
+                                "content": str(meal_row['Notes'])
                             }
                         }
                     ]
@@ -327,9 +336,9 @@ async def save_meals(meals: List[Dict[str, Any]] = Body(...)):
         # Convert to DataFrame for compatibility with existing code
         meals_df = pd.DataFrame(meals)
         
-        # Convert Date column to datetime if it exists
+        # Convert Date column to datetime if it exists, ensuring consistent format
         if 'Date' in meals_df.columns:
-            meals_df['Date'] = pd.to_datetime(meals_df['Date'], errors='coerce')
+            meals_df['Date'] = pd.to_datetime(meals_df['Date'], format='%Y/%m/%d', errors='coerce')
         
         # Get the set of changed indices before saving
         changed_indices_set = database.get_changed_indices()
@@ -354,6 +363,7 @@ async def save_meals(meals: List[Dict[str, Any]] = Body(...)):
         }
         
     except Exception as e:
+        logger.error(f"Failed to save meals: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to save meals: {str(e)}")
 
 @app.get("/api/meals/reload")

@@ -200,14 +200,25 @@ export default {
       this.error = null;
       try {
         const response = await axios.get('/api/meals');
-        if (response.data && response.data.meals && response.data.meals.length > 0) {
+        if (response.data && response.data.meals) {
           this.meals = response.data.meals;
           
-          // Track if there are changes on the server
-          this.hasChanges = response.data.hasChanges || false;
+          // Track if there are changes on the server - note: these values are not in response anymore
+          this.hasChanges = false;
           
-          // Store the changed indices
-          this.changedIndices = response.data.changedIndices || [];
+          // Get changed indices from separate endpoint
+          try {
+            const changesResponse = await axios.get('/api/meals/changes');
+            if (changesResponse.data && changesResponse.data.changedIndices) {
+              this.changedIndices = changesResponse.data.changedIndices;
+              this.hasChanges = this.changedIndices.length > 0;
+            }
+          } catch (changesError) {
+            console.error('Error fetching changes:', changesError);
+            // Don't show error to user, just reset changes state
+            this.changedIndices = [];
+            this.hasChanges = false;
+          }
           
           this.selectTodaysMeal();
         } else {
@@ -227,15 +238,20 @@ export default {
       
       this.loading = true;
       try {
-        // Send all meals to the backend
-        await axios.post('/api/meals/save', this.meals);
+        // Send only the meals data to the backend
+        const response = await axios.post('/api/meals/save', this.meals);
         
-        // Reset the changes flag and changed indices
-        this.hasChanges = false;
-        this.changedIndices = [];
-        
-        // Show success notification
-        this.showNotification('All changes saved successfully!', 'success');
+        if (response.data && response.data.status === 'success') {
+          // Reset the changes flag and changed indices
+          this.hasChanges = false;
+          this.changedIndices = [];
+          
+          // Show success notification with Notion update info
+          const notionMsg = response.data.notionUpdated ? ' and synchronized with Notion' : '';
+          this.showNotification(`All changes saved successfully${notionMsg}!`, 'success');
+        } else {
+          throw new Error('Unexpected response from server');
+        }
       } catch (error) {
         console.error('Error saving all changes:', error);
         this.showNotification('Failed to save changes: ' + (error.response?.data?.detail || error.message), 'error');
