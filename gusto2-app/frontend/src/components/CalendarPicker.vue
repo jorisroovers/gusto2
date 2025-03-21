@@ -49,6 +49,28 @@ export default {
       currentMonth: new Date()
     };
   },
+  watch: {
+    selectedDate: {
+      handler(newDate) {
+        if (newDate) {
+          const selectedDateObj = new Date(newDate);
+          // Check if the selectedDate is in a different month than currentMonth
+          if (
+            selectedDateObj.getMonth() !== this.currentMonth.getMonth() ||
+            selectedDateObj.getFullYear() !== this.currentMonth.getFullYear()
+          ) {
+            // Update currentMonth to the month of the selected date
+            this.currentMonth = new Date(
+              selectedDateObj.getFullYear(),
+              selectedDateObj.getMonth(),
+              1
+            );
+          }
+        }
+      },
+      immediate: true // Check when component is created
+    }
+  },
   computed: {
     currentMonthDisplay() {
       return this.currentMonth.toLocaleString('default', { month: 'long', year: 'numeric' });
