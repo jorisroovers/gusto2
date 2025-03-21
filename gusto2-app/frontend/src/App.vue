@@ -67,6 +67,16 @@
                 <p v-if="currentMeal.Notes">{{ currentMeal.Notes }}</p>
                 <p v-else>&nbsp;</p>
               </div>
+              <!-- Add suggestion UI -->
+              <div v-if="!currentMeal.Name" class="suggestion-actions">
+                <button @click="suggestRecipe" class="suggest-button" :disabled="loading">
+                  {{ suggestedRecipe ? 'Suggest Another' : 'Suggest Recipe' }}
+                </button>
+                <div v-if="suggestedRecipe" class="suggested-recipe">
+                  <p>Suggested: {{ suggestedRecipe.Name }}</p>
+                  <button @click="acceptSuggestion" class="accept-button">Accept</button>
+                </div>
+              </div>
             </div>
             <div v-else class="edit-form">
               <div class="form-group">
@@ -194,7 +204,8 @@ export default {
       notificationType: 'info',
       hasChanges: false, // Track if there are changes on the server
       changedIndices: [], // Track which specific indices have been changed
-      lastViewedDate: null // Store the date of the last viewed meal
+      lastViewedDate: null, // Store the date of the last viewed meal
+      suggestedRecipe: null, // Add suggested recipe state
     };
   },
   computed: {
@@ -556,7 +567,68 @@ export default {
       if (selectedIndex !== -1) {
         this.currentIndex = selectedIndex;
       }
-    }
+    },
+    async suggestRecipe() {
+      try {
+        const response = await axios.get('/api/recipes');
+        const recipes = response.data.recipes;
+        if (!recipes || recipes.length === 0) {
+          this.showNotification('No recipes available to suggest', 'error');
+          return;
+        }
+
+        // Filter out the current suggestion to avoid repeating it
+        const availableRecipes = recipes.filter(r => 
+          !this.suggestedRecipe || r.Name !== this.suggestedRecipe.Name
+        );
+
+        if (availableRecipes.length === 0) {
+          // If we've filtered out all recipes, use the full list again
+          this.suggestedRecipe = recipes[Math.floor(Math.random() * recipes.length)];
+        } else {
+          // Pick a random recipe from available ones
+          this.suggestedRecipe = availableRecipes[Math.floor(Math.random() * availableRecipes.length)];
+        }
+      } catch (error) {
+        console.error('Error fetching recipes:', error);
+        this.showNotification('Failed to fetch recipes for suggestion', 'error');
+      }
+    },
+
+    async acceptSuggestion() {
+      if (!this.suggestedRecipe) return;
+
+      // Update the current meal with the suggested recipe
+      const meal = {
+        Name: this.suggestedRecipe.Name,
+        Tags: this.suggestedRecipe.Tags,
+      };
+
+      try {
+        // Use existing update meal functionality
+        const response = await axios.put(`/api/meal/${this.currentIndex}`, meal);
+        
+        if (response.data.status === 'success') {
+          // Update local state
+          this.meals[this.currentIndex] = {
+            ...this.meals[this.currentIndex],
+            ...meal
+          };
+          
+          // Update changed indices from server response
+          this.changedIndices = response.data.changedIndices;
+          this.hasChanges = this.changedIndices.length > 0;
+          
+          // Clear suggestion after accepting
+          this.suggestedRecipe = null;
+          
+          this.showNotification('Recipe added to meal plan!', 'success');
+        }
+      } catch (error) {
+        console.error('Error accepting suggestion:', error);
+        this.showNotification('Failed to add recipe to meal plan', 'error');
+      }
+    },
   },
   mounted() {
     // Fetch meals when the component is mounted
@@ -958,5 +1030,73 @@ header {
 /* Move header buttons below tabs */
 .header-buttons {
   margin-top: 10px;
+}
+
+/* Add styles for suggestion UI */
+.suggestion-actions {
+  margin-top: 15px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.suggest-button {
+  background-color: #16a085;
+  border: none;
+  color: white;
+  padding: 8px 15px;
+  text-align: center;
+  text-decoration: none;
+  display: inline-block;
+  font-size: 14px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background-color 0.3s;
+}
+
+.suggest-button:hover {
+  background-color: #138d75;
+}
+
+.suggest-button:disabled {
+  background-color: #cccccc;
+  cursor: not-allowed;
+}
+
+.suggested-recipe {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 10px;
+  background-color: #e8f6f3;
+  border-radius: 4px;
+  width: 100%;
+  max-width: 300px;
+}
+
+.suggested-recipe p {
+  margin: 0;
+  font-weight: 500;
+  color: #16a085;
+}
+
+.accept-button {
+  background-color: #e67e22;
+  border: none;
+  color: white;
+  padding: 6px 12px;
+  text-align: center;
+  text-decoration: none;
+  display: inline-block;
+  font-size: 13px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background-color 0.3s;
+}
+
+.accept-button:hover {
+  background-color: #d35400;
 }
 </style>
