@@ -5,12 +5,35 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Dict, Any, List, Optional
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 import requests
 import json
 
 # Import from our database module
 from gusto2 import database
+
+# Import from our rules module
+try:
+    from gusto2.rules.rule_engine import default_rule_engine, RuleType
+except ImportError as e:
+    # Configure logging if not already configured
+    logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger(__name__)
+    
+    logger.error(f"Failed to import rule_engine module: {str(e)}")
+    # Create a dummy rule engine for graceful fallback
+    class DummyRuleEngine:
+        def validate_meal_plan(self, *args, **kwargs):
+            return []
+        def can_add_meal(self, *args, **kwargs):
+            return {"can_add": True, "constraint_results": [], "requirement_results": []}
+        def suggest_meals_for_date(self, *args, **kwargs):
+            return []
+    default_rule_engine = DummyRuleEngine()
+    
+    class RuleType:
+        CONSTRAINT = "CONSTRAINT"
+        REQUIREMENT = "REQUIREMENT"
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -41,6 +64,14 @@ class Meal(BaseModel):
 class Recipe(BaseModel):
     Name: str
     Tags: Optional[str] = None
+
+# Pydantic models for rules API
+class MealSuggestionRequest(BaseModel):
+    date: str
+    count: Optional[int] = 3
+
+class MealValidator(BaseModel):
+    date: Optional[str] = None
 
 def fetch_from_notion():
     """Fetch meal data from Notion database and save to database"""
@@ -518,6 +549,130 @@ async def populate_recipes():
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to populate recipes: {str(e)}")
+
+@app.get("/api/rules")
+async def get_rules():
+    """Get all meal planning rules"""
+    try:
+        rules = default_rule_engine.get_rules()
+        return {
+            "status": "success",
+            "rules": [
+                {
+                    "name": rule.name,
+                    "description": rule.description,
+                    "type": rule.type.name,
+                    "scope": rule.scope.name,
+                    "enabled": rule.enabled,
+                }
+                for rule in rules
+            ]
+        }
+    except Exception as e:
+        logger.error(f"Failed to get rules: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get rules: {str(e)}")
+
+@app.post("/api/rules/validate")
+async def validate_meal_plan(validator: MealValidator):
+    """Validate a meal plan against rules"""
+    try:
+        # Get meals from database
+        meals_df = database.read_meals()
+        
+        date = None
+        if validator.date:
+            try:
+                date = datetime.strptime(validator.date, "%Y/%m/%d")
+            except ValueError:
+                raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY/MM/DD")
+        
+        # Validate against rules
+        validation_results = default_rule_engine.validate_meal_plan(meals_df, date)
+        
+        # Group results by rule type
+        constraints = []
+        requirements = []
+        
+        for result in validation_results:
+            if result["rule_type"] == RuleType.CONSTRAINT.name:
+                constraints.append(result)
+            else:
+                requirements.append(result)
+                
+        return {
+            "status": "success",
+            "constraints": constraints,
+            "requirements": requirements,
+            "all_constraints_met": all(r["is_valid"] for r in constraints),
+            "all_requirements_met": all(r["is_valid"] for r in requirements),
+        }
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        logger.error(f"Failed to validate meal plan: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to validate meal plan: {str(e)}")
+
+@app.post("/api/rules/suggest-meals")
+async def suggest_meals(suggestion_request: MealSuggestionRequest):
+    """Get meal suggestions based on rules"""
+    try:
+        # Parse the date
+        try:
+            date = datetime.strptime(suggestion_request.date, "%Y/%m/%d")
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY/MM/DD")
+        
+        # Get meals from database for context
+        meals_df = database.read_meals()
+        
+        # Get available recipes
+        recipes_df = database.read_recipes()
+        
+        if recipes_df.empty:
+            raise HTTPException(status_code=404, detail="No recipes found")
+        
+        # Convert recipes to the format expected by the rule engine
+        available_meals = []
+        for _, recipe in recipes_df.iterrows():
+            if pd.notna(recipe['Name']):
+                meal = {
+                    "name": recipe['Name'],
+                    "tags": recipe['Tags'] if pd.notna(recipe['Tags']) else ""
+                }
+                available_meals.append(meal)
+        
+        # Get suggestions
+        count = suggestion_request.count or 3
+        suggestions = default_rule_engine.suggest_meals_for_date(
+            date=date,
+            available_meals=available_meals,
+            meals_df=meals_df,
+            count=count
+        )
+        
+        # Format the response
+        response_suggestions = []
+        for suggestion in suggestions:
+            response_suggestions.append({
+                "meal": suggestion["meal"],
+                "score": suggestion["requirement_score"],
+                "reasons": [
+                    result["reason"] 
+                    for result in suggestion["validation_result"]["requirement_results"]
+                    if "helps meet" in result["reason"]
+                ]
+            })
+        
+        return {
+            "status": "success",
+            "suggestions": response_suggestions,
+            "date": suggestion_request.date
+        }
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        logger.error(f"Failed to get meal suggestions: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get meal suggestions: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn

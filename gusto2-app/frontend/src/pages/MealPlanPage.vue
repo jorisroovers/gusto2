@@ -146,6 +146,14 @@
                 </button>
               </div>
             </div>
+            
+            <!-- Meal Plan Rules Component -->
+            <meal-plan-rules
+              :current-date="currentMeal.Date"
+              :current-index="currentIndex"
+              @use-suggestion="handleRuleSuggestion"
+              class="meal-rules-section"
+            />
           </div>
 
           <!-- Calendar picker moved below the meal display -->
@@ -168,11 +176,13 @@
 <script>
 import axios from 'axios';
 import CalendarPicker from '../components/CalendarPicker.vue';
+import MealPlanRules from '../components/MealPlanRules.vue';
 
 export default {
   name: 'MealPlanPage',
   components: {
-    CalendarPicker
+    CalendarPicker,
+    MealPlanRules
   },
   data() {
     return {
@@ -582,6 +592,33 @@ export default {
         this.showDeleteConfirmation = false;
       }
     },
+    
+    // Handle rule-based meal suggestions
+    async handleRuleSuggestion({ meal, index }) {
+      try {
+        const mealData = {
+          Name: meal.name,
+          Tags: meal.tags
+        };
+        
+        const response = await axios.put(`/api/meal/${index}`, mealData);
+        
+        if (response.data.status === 'success') {
+          this.meals[index] = {
+            ...this.meals[index],
+            ...mealData
+          };
+          
+          this.changedIndices = response.data.changedIndices;
+          this.hasChanges = this.changedIndices.length > 0;
+          
+          this.showNotification('Rule-suggested meal added to meal plan!', 'success');
+        }
+      } catch (error) {
+        console.error('Error applying rule suggestion:', error);
+        this.showNotification('Failed to add rule-suggested meal to meal plan', 'error');
+      }
+    }
   },
   mounted() {
     this.fetchMeals();
@@ -957,6 +994,38 @@ export default {
   width: 100%;
   max-width: 400px;
   margin: 0 auto;
+}
+
+/* Add styles for the meal rules section */
+.meal-rules-section {
+  width: 100%;
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+/* Notification style */
+.notification {
+  padding: 10px 15px;
+  margin-bottom: 15px;
+  border-radius: 4px;
+  color: white;
+  text-align: center;
+}
+
+.notification.success {
+  background-color: #2ecc71;
+}
+
+.notification.info {
+  background-color: #3498db;
+}
+
+.notification.error {
+  background-color: #e74c3c;
+}
+
+.notification.warning {
+  background-color: #f39c12;
 }
 
 /* Desktop layout */
