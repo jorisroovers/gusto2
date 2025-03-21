@@ -123,7 +123,23 @@ export default {
     
     selectDate(date) {
       if (date.date) {
-        this.$emit('date-selected', date.date);
+        // Find the corresponding meal with this date to get its exact date format
+        const matchingMeal = this.meals.find(meal => {
+          if (!meal.Date) return false;
+          
+          // Use our date comparison logic to find the meal with matching date
+          const mealDate = new Date(meal.Date);
+          const formattedMealDate = this.formatDateToString(mealDate);
+          return formattedMealDate === date.date;
+        });
+        
+        // If found, emit the original date format, otherwise use our formatted date
+        if (matchingMeal && matchingMeal.Date) {
+          this.$emit('date-selected', matchingMeal.Date);
+        } else {
+          // As a fallback, emit the calendar date format
+          this.$emit('date-selected', date.date);
+        }
       }
     },
     
