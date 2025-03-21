@@ -1,6 +1,8 @@
 <template>
   <div class="recipes-page">
-    <recipe-list />
+    <div class="content-wrapper">
+      <recipe-list />
+    </div>
   </div>
 </template>
 
@@ -17,6 +19,12 @@ export default {
 
 <style scoped>
 .recipes-page {
-  padding: 20px;
+  width: 100%;
+}
+
+.content-wrapper {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 1rem;
 }
 </style>

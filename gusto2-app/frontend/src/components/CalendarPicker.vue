@@ -199,36 +199,39 @@ export default {
 .calendar-picker {
   background: white;
   border-radius: 8px;
-  padding: 20px;
+  padding: 1.25rem;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  margin-top: 20px;
+  width: 100%;
 }
 
 .calendar-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 20px;
+  margin-bottom: 1.25rem;
 }
 
 .month-display {
   font-weight: 500;
-  font-size: 1.2em;
+  font-size: 1.1rem;
   color: #2c3e50;
+  text-align: center;
+  min-width: 140px;
 }
 
 .calendar-grid {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  gap: 8px;
+  gap: 4px;
+  aspect-ratio: 7/6;
 }
 
 .weekday-header {
   text-align: center;
   font-weight: 500;
   color: #666;
-  padding: 8px 0;
-  font-size: 0.9em;
+  padding: 4px 0;
+  font-size: 0.875rem;
 }
 
 .calendar-day {
@@ -239,10 +242,11 @@ export default {
   border: 1px solid #eee;
   border-radius: 4px;
   cursor: pointer;
-  font-size: 0.9em;
+  font-size: 0.875rem;
   transition: all 0.2s ease;
   position: relative;
   background: white;
+  padding: 4px;
 }
 
 .calendar-day:not(.empty):hover {
@@ -276,10 +280,11 @@ export default {
   background: transparent;
   border: 1px solid #ddd;
   border-radius: 4px;
-  padding: 8px 16px;
+  padding: 6px 12px;
   cursor: pointer;
   transition: all 0.2s ease;
   color: #2c3e50;
+  min-width: 40px;
 }
 
 .nav-button:hover {
@@ -288,7 +293,7 @@ export default {
 }
 
 .icon {
-  font-size: 1.2em;
+  font-size: 1.1rem;
   line-height: 1;
   display: flex;
   align-items: center;
@@ -298,25 +303,17 @@ export default {
 .changed-indicator {
   color: #e74c3c;
   font-weight: bold;
-  font-size: 1.2em;
+  font-size: 1rem;
   position: absolute;
   top: 2px;
   right: 4px;
 }
 
-/* For mobile screens, make the calendar more compact */
-@media (max-width: 600px) {
+/* For mobile screens, ensure calendar stays readable */
+@media (max-width: 1023px) {
   .calendar-picker {
-    padding: 15px;
-  }
-
-  .calendar-grid {
-    gap: 4px;
-  }
-
-  .weekday-header {
-    font-size: 0.8em;
-    padding: 4px 0;
+    max-width: 400px;
+    margin: 0 auto;
   }
 }
 </style>

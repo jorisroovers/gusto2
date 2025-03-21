@@ -1,12 +1,14 @@
 <template>
   <div id="app">
-    <header>
-      <h1>Gusto2 App</h1>
-      <nav class="nav-links">
-        <router-link to="/mealplan" class="nav-link" active-class="active">Meal Plan</router-link>
-        <router-link to="/recipes" class="nav-link" active-class="active">Recipes</router-link>
-      </nav>
-    </header>
+    <nav class="top-nav">
+      <div class="nav-content">
+        <h1>Gusto2 App</h1>
+        <div class="nav-links">
+          <router-link to="/mealplan" class="nav-link" active-class="active">Meal Plan</router-link>
+          <router-link to="/recipes" class="nav-link" active-class="active">Recipes</router-link>
+        </div>
+      </div>
+    </nav>
     <main>
       <router-view></router-view>
     </main>
@@ -31,34 +33,44 @@ export default {
   margin: 0;
 }
 
-header {
+.top-nav {
   background-color: #f8f9fa;
   border-bottom: 1px solid #e9ecef;
-  padding: 15px 20px;
-  margin-bottom: 20px;
+  padding: 0.75rem 2rem;
+  position: sticky;
+  top: 0;
+  z-index: 1000;
 }
 
-header h1 {
-  margin: 0 0 15px 0;
+.nav-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  max-width: 1400px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.top-nav h1 {
+  margin: 0;
   color: #2c3e50;
-  font-size: 24px;
+  font-size: 1.5rem;
   font-weight: 600;
 }
 
 .nav-links {
   display: flex;
-  gap: 10px;
-  justify-content: center;
+  gap: 1rem;
 }
 
 .nav-link {
   background-color: #fff;
   border: 1px solid #dee2e6;
   color: #495057;
-  padding: 8px 16px;
+  padding: 0.5rem 1rem;
   text-decoration: none;
   border-radius: 4px;
-  font-size: 14px;
+  font-size: 0.875rem;
   font-weight: 500;
   transition: all 0.3s ease;
 }
@@ -77,9 +89,9 @@ header h1 {
 main {
   flex: 1;
   width: 100%;
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 0 20px;
+  max-width: 100%;
+  margin: 0;
+  padding: 1.25rem;
 }
 
 /* Common notification styles */
@@ -128,5 +140,22 @@ main {
 body {
   margin: 0;
   padding: 0;
+}
+
+/* Media queries for responsive design */
+@media (max-width: 768px) {
+  .nav-content {
+    flex-direction: column;
+    gap: 1rem;
+    text-align: center;
+  }
+  
+  .nav-links {
+    justify-content: center;
+  }
+  
+  .top-nav {
+    padding: 0.75rem 1rem;
+  }
 }
 </style>

@@ -19,140 +19,147 @@
       </button>
     </div>
 
-    <div class="card">
-      <!-- Notification area for saving/reloading status -->
-      <div v-if="notification" class="notification" :class="notificationType">
-        {{ notification }}
-      </div>
-      <div v-if="loading" class="loading">Loading meals...</div>
-      <div v-else-if="error" class="error">{{ error }}</div>
-      <div v-else-if="meals.length === 0" class="no-meals">No meals found</div>
-      <div v-else class="meal-display">
-        <!-- Meal information first with fixed height -->
-        <div class="meal-info">
-          <div v-if="!editMode">
-            <div v-if="currentMeal.Name" class="meal-name">
-              <h3>{{ currentMeal.Name }}</h3>
-              <span v-if="isCurrentMealChanged" class="changed-indicator" title="This meal has unsaved changes">*</span>
-              <div class="delete-container">
-                <button v-if="!showDeleteConfirmation" @click="showDeleteConfirmation = true" class="delete-button" title="Remove meal">×</button>
-                <div v-else class="delete-confirmation">
-                  <span>Delete?</span>
-                  <button @click="confirmDelete" class="confirm-yes">Yes</button>
-                  <button @click="showDeleteConfirmation = false" class="confirm-no">No</button>
+    <div class="content-wrapper">
+      <div class="main-content">
+        <!-- Notification area for saving/reloading status -->
+        <div v-if="notification" class="notification" :class="notificationType">
+          {{ notification }}
+        </div>
+        <div v-if="loading" class="loading">Loading meals...</div>
+        <div v-else-if="error" class="error">{{ error }}</div>
+        <div v-else-if="meals.length === 0" class="no-meals">No meals found</div>
+        <div v-else class="meal-display">
+          <!-- Day view content -->
+          <div class="day-view">
+            <!-- Meal information first with fixed height -->
+            <div class="meal-info">
+              <div v-if="!editMode">
+                <div v-if="currentMeal.Name" class="meal-name">
+                  <h3>{{ currentMeal.Name }}</h3>
+                  <span v-if="isCurrentMealChanged" class="changed-indicator" title="This meal has unsaved changes">*</span>
+                  <div class="delete-container">
+                    <button v-if="!showDeleteConfirmation" @click="showDeleteConfirmation = true" class="delete-button" title="Remove meal">×</button>
+                    <div v-else class="delete-confirmation">
+                      <span>Delete?</span>
+                      <button @click="confirmDelete" class="confirm-yes">Yes</button>
+                      <button @click="showDeleteConfirmation = false" class="confirm-no">No</button>
+                    </div>
+                  </div>
+                </div>
+                <div v-else class="no-meal-planned">
+                  <h3>No meal planned</h3>
+                  <span v-if="isCurrentMealChanged" class="changed-indicator" title="This meal has unsaved changes">*</span>
+                </div>
+                <div class="meal-description">
+                  <p v-if="currentMeal.Notes">{{ currentMeal.Notes }}</p>
+                  <p v-else>&nbsp;</p>
+                </div>
+                <!-- Add suggestion UI - now available for both empty and existing meals -->
+                <div class="suggestion-actions">
+                  <button @click="suggestMeal" class="suggest-button" :disabled="loading">
+                    {{ suggestedMeal ? 'Suggest Another' : 'Suggest Meal' }}
+                  </button>
+                  <div v-if="suggestedMeal" class="suggested-recipe">
+                    <p>Suggested: {{ suggestedMeal.Name }}</p>
+                    <button @click="acceptSuggestion" class="accept-button">Accept</button>
+                  </div>
+                </div>
+              </div>
+              <div v-else class="edit-form">
+                <div class="form-group">
+                  <label for="mealName">Meal Name:</label>
+                  <input 
+                    id="mealName" 
+                    type="text" 
+                    v-model="editedMeal.Name" 
+                    placeholder="Enter meal name"
+                  />
+                </div>
+                <div class="form-group">
+                  <label for="mealDescription">Description/Notes:</label>
+                  <textarea 
+                    id="mealDescription" 
+                    v-model="editedMeal.Notes" 
+                    placeholder="Enter notes or description"
+                    rows="2"
+                  ></textarea>
+                </div>
+                <div class="form-group">
+                  <label for="mealTags">Tags:</label>
+                  <input 
+                    id="mealTags" 
+                    type="text" 
+                    v-model="editedMeal.Tags" 
+                    placeholder="Enter tags (comma separated)"
+                  />
                 </div>
               </div>
             </div>
-            <div v-else class="no-meal-planned">
-              <h3>No meal planned</h3>
-              <span v-if="isCurrentMealChanged" class="changed-indicator" title="This meal has unsaved changes">*</span>
+            
+            <!-- Edit mode actions -->
+            <div v-if="editMode" class="edit-actions">
+              <button @click="saveMeal" class="save-button">Save</button>
+              <button @click="cancelEdit" class="cancel-button">Cancel</button>
             </div>
-            <div class="meal-description">
-              <p v-if="currentMeal.Notes">{{ currentMeal.Notes }}</p>
-              <p v-else>&nbsp;</p>
-            </div>
-            <!-- Add suggestion UI - now available for both empty and existing meals -->
-            <div class="suggestion-actions">
-              <button @click="suggestMeal" class="suggest-button" :disabled="loading">
-                {{ suggestedMeal ? 'Suggest Another' : 'Suggest Meal' }}
-              </button>
-              <div v-if="suggestedMeal" class="suggested-recipe">
-                <p>Suggested: {{ suggestedMeal.Name }}</p>
-                <button @click="acceptSuggestion" class="accept-button">Accept</button>
+            
+            <!-- Navigation buttons below meal info with date and counter -->
+            <div class="navigation">
+              <div class="nav-column">
+                <button 
+                  @click="previousMeal" 
+                  :disabled="currentIndex <= 0 || editMode"
+                  class="nav-button"
+                >
+                  &lt; Previous
+                </button>
+                <button 
+                  @click="findPreviousUnplanned" 
+                  class="unplanned-button"
+                  :disabled="editMode"
+                >
+                  &lt; Previous Unplanned
+                </button>
+              </div>
+              
+              <div class="center-column">
+                <p v-if="currentMeal.Date" class="date-display">{{ formatDate(currentMeal.Date) }}</p>
+                <button @click="selectTodaysMeal" class="today-button" :disabled="editMode">Today</button>
+                <p class="meal-counter">{{ currentIndex + 1 }} of {{ meals.length }}</p>
+                <!-- Edit button -->
+                <button v-if="!editMode" @click="startEdit" class="edit-button">Edit</button>
+              </div>
+              
+              <div class="nav-column">
+                <button 
+                  @click="nextMeal" 
+                  :disabled="currentIndex >= meals.length - 1 || editMode"
+                  class="nav-button"
+                >
+                  Next &gt;
+                </button>
+                <button 
+                  @click="findNextUnplanned" 
+                  class="unplanned-button"
+                  :disabled="editMode"
+                >
+                  Next Unplanned &gt;
+                </button>
               </div>
             </div>
           </div>
-          <div v-else class="edit-form">
-            <div class="form-group">
-              <label for="mealName">Meal Name:</label>
-              <input 
-                id="mealName" 
-                type="text" 
-                v-model="editedMeal.Name" 
-                placeholder="Enter meal name"
-              />
-            </div>
-            <div class="form-group">
-              <label for="mealDescription">Description/Notes:</label>
-              <textarea 
-                id="mealDescription" 
-                v-model="editedMeal.Notes" 
-                placeholder="Enter notes or description"
-                rows="2"
-              ></textarea>
-            </div>
-            <div class="form-group">
-              <label for="mealTags">Tags:</label>
-              <input 
-                id="mealTags" 
-                type="text" 
-                v-model="editedMeal.Tags" 
-                placeholder="Enter tags (comma separated)"
-              />
-            </div>
-          </div>
-        </div>
-        
-        <!-- Edit mode actions -->
-        <div v-if="editMode" class="edit-actions">
-          <button @click="saveMeal" class="save-button">Save</button>
-          <button @click="cancelEdit" class="cancel-button">Cancel</button>
-        </div>
-        
-        <!-- Navigation buttons below meal info with date and counter -->
-        <div class="navigation">
-          <div class="nav-column">
-            <button 
-              @click="previousMeal" 
-              :disabled="currentIndex <= 0 || editMode"
-              class="nav-button"
-            >
-              &lt; Previous
-            </button>
-            <button 
-              @click="findPreviousUnplanned" 
-              class="unplanned-button"
-              :disabled="editMode"
-            >
-              &lt; Previous Unplanned
-            </button>
-          </div>
-          
-          <div class="center-column">
-            <p v-if="currentMeal.Date" class="date-display">{{ formatDate(currentMeal.Date) }}</p>
-            <button @click="selectTodaysMeal" class="today-button" :disabled="editMode">Today</button>
-            <p class="meal-counter">{{ currentIndex + 1 }} of {{ meals.length }}</p>
-            <!-- Edit button -->
-            <button v-if="!editMode" @click="startEdit" class="edit-button">Edit</button>
-          </div>
-          
-          <div class="nav-column">
-            <button 
-              @click="nextMeal" 
-              :disabled="currentIndex >= meals.length - 1 || editMode"
-              class="nav-button"
-            >
-              Next &gt;
-            </button>
-            <button 
-              @click="findNextUnplanned" 
-              class="unplanned-button"
-              :disabled="editMode"
-            >
-              Next Unplanned &gt;
-            </button>
-          </div>
-        </div>
 
-        <!-- Calendar picker moved below the meal display -->
-        <calendar-picker 
-          v-if="!loading && !error" 
-          :meals="meals" 
-          :selected-date="currentMeal.Date"
-          :changed-indices="changedIndices"
-          @date-selected="selectDate"
-          class="calendar-section"
-        />
+          <!-- Calendar picker moved below the meal display -->
+          <div class="calendar-container">
+            <calendar-picker 
+              v-if="!loading && !error" 
+              :meals="meals" 
+              :selected-date="currentMeal.Date"
+              :changed-indices="changedIndices"
+              @date-selected="selectDate"
+              class="calendar-section"
+            />
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -584,7 +591,10 @@ export default {
 
 <style scoped>
 .meal-plan-page {
-  padding: 20px;
+  width: 100%;
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 1rem;
 }
 
 .header-buttons {
@@ -595,6 +605,8 @@ export default {
 }
 
 .header-buttons button {
+  width: fit-content;
+  min-width: 120px;
   padding: 8px 16px;
   border-radius: 4px;
   border: 1px solid #ddd;
@@ -622,16 +634,29 @@ export default {
   background-color: #f5f5f5;
 }
 
-.card {
-  max-width: 600px;
+.content-wrapper {
   margin: 0 auto;
-  padding: 20px;
-  border-radius: 8px;
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-  background-color: #f9f9f9;
+}
+
+.main-content {
+  width: 100%;
+}
+
+.meal-display {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.day-view {
+  flex: 1;
+  min-width: 0; /* Prevent flex items from overflowing */
 }
 
 .meal-info {
+  width: 100%;
+  max-width: 800px;
+  margin: 0 auto;
   background: white;
   padding: 20px;
   border-radius: 8px;
@@ -815,6 +840,9 @@ export default {
 }
 
 .navigation {
+  width: 100%;
+  max-width: 800px;
+  margin: 0 auto 20px;
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   gap: 15px;
@@ -834,6 +862,9 @@ export default {
 
 .nav-button,
 .unplanned-button {
+  width: fit-content;
+  min-width: 100px;
+  max-width: 200px;
   padding: 8px 12px;
   border: 1px solid #ddd;
   border-radius: 4px;
@@ -918,7 +949,37 @@ export default {
   color: #95a5a6;
 }
 
+.calendar-container {
+  width: 100%;
+}
+
 .calendar-section {
-  margin-top: 20px;
+  width: 100%;
+  max-width: 400px;
+  margin: 0 auto;
+}
+
+/* Desktop layout */
+@media (min-width: 1024px) {
+  .meal-display {
+    flex-direction: row;
+    align-items: flex-start;
+  }
+
+  .day-view {
+    flex: 1;
+    margin-right: 2rem;
+    max-width: 800px;
+  }
+
+  .calendar-container {
+    width: 400px;
+    position: sticky;
+    top: 100px; /* Adjust based on your header height */
+  }
+
+  .calendar-section {
+    margin: 0;
+  }
 }
 </style>

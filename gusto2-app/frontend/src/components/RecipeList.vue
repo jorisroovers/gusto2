@@ -92,26 +92,24 @@ export default {
 
 <style scoped>
 .recipe-list {
-  padding: 20px;
-  max-width: 1200px;
-  margin: 0 auto;
+  width: 100%;
 }
 
 .recipe-controls {
-  margin-bottom: 20px;
+  margin-bottom: 1.5rem;
   display: flex;
   justify-content: center;
 }
 
 .populate-button {
-  padding: 8px 16px;
+  padding: 0.5rem 1rem;
   border-radius: 4px;
   background-color: #3498db;
   color: white;
   border: 1px solid #2980b9;
   cursor: pointer;
   transition: all 0.3s ease;
-  font-size: 14px;
+  font-size: 0.875rem;
 }
 
 .populate-button:hover:not(:disabled) {
@@ -125,15 +123,15 @@ export default {
 
 .recipes-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-  gap: 20px;
-  margin-top: 20px;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1.5rem;
+  margin-top: 1.5rem;
 }
 
 .recipe-card {
   background: white;
   border-radius: 8px;
-  padding: 20px;
+  padding: 1.25rem;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
@@ -144,29 +142,30 @@ export default {
 }
 
 .recipe-card h3 {
-  margin: 0 0 15px 0;
+  margin: 0 0 1rem 0;
   color: #2c3e50;
-  font-size: 1.2em;
+  font-size: 1.1rem;
+  line-height: 1.4;
 }
 
 .tags {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 0.5rem;
 }
 
 .tag {
   background-color: #f0f2f5;
   color: #2c3e50;
-  padding: 4px 10px;
+  padding: 0.25rem 0.75rem;
   border-radius: 12px;
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 500;
 }
 
 .loading, .error, .no-recipes {
   text-align: center;
-  padding: 40px;
+  padding: 2.5rem;
   color: #666;
   background: white;
   border-radius: 8px;
@@ -178,13 +177,15 @@ export default {
   background-color: #fdf0f0;
 }
 
-/* Using the same notification styles as MealPlanPage */
 .notification {
-  padding: 10px;
-  margin-bottom: 15px;
+  padding: 0.75rem;
+  margin-bottom: 1rem;
   border-radius: 5px;
   font-weight: 500;
   text-align: center;
+  max-width: 600px;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .notification.success {
@@ -203,5 +204,12 @@ export default {
   background-color: #d1ecf1;
   color: #0c5460;
   border: 1px solid #bee5eb;
+}
+
+@media (max-width: 768px) {
+  .recipes-grid {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
 }
 </style>
