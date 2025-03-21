@@ -333,17 +333,28 @@ def save_recipes(df):
     """Save recipes to database"""
     try:
         with SessionLocal() as db:
-            # Delete all existing recipes
-            db.query(RecipeModel).delete()
-            db.commit()
-            
-            # Insert new recipes
+            # For each recipe in the dataframe
             for _, row in df.iterrows():
-                recipe = RecipeModel(
-                    name=row.get('Name'),
-                    tags=row.get('Tags')
-                )
-                db.add(recipe)
+                # Handle NA/NaN values by converting them to None
+                name = row.get('Name') if pd.notna(row.get('Name')) else None
+                tags = row.get('Tags') if pd.notna(row.get('Tags')) else None
+                
+                if not name:  # Skip if no name provided
+                    continue
+                
+                # Check if recipe already exists
+                existing_recipe = db.query(RecipeModel).filter_by(name=name).first()
+                
+                if existing_recipe:
+                    # Update existing recipe
+                    existing_recipe.tags = tags
+                else:
+                    # Create new recipe
+                    recipe = RecipeModel(
+                        name=name,
+                        tags=tags
+                    )
+                    db.add(recipe)
             
             # Commit the transaction
             db.commit()
@@ -361,17 +372,25 @@ def populate_recipes_from_meals():
     # Get unique meals with their tags
     unique_meals = meals[['Name', 'Tags']].dropna(subset=['Name']).drop_duplicates()
     
-    # If we already have recipes, only add new ones
-    if not existing_recipes.empty:
-        # Only add meals that aren't already in recipes
-        existing_names = set(existing_recipes['Name'].dropna())
-        unique_meals = unique_meals[~unique_meals['Name'].isin(existing_names)]
+    # If we already have recipes, only process new ones
+    existing_names = set(existing_recipes['Name'].dropna())
+    new_recipes_count = 0
     
-    if not unique_meals.empty:
-        # Combine existing and new recipes
-        combined_recipes = pd.concat([existing_recipes, unique_meals], ignore_index=True)
-        save_recipes(combined_recipes)
-        logger.info(f"Added {len(unique_meals)} new recipes from meals")
+    # Process each new recipe individually
+    for _, row in unique_meals.iterrows():
+        name = row.get('Name')
+        if name and name not in existing_names:
+            # Create a single recipe DataFrame
+            recipe_df = pd.DataFrame({
+                "Name": [name],
+                "Tags": [row.get('Tags')]
+            })
+            if save_recipes(recipe_df):
+                new_recipes_count += 1
+                existing_names.add(name)  # Add to set to avoid duplicates
+    
+    if new_recipes_count > 0:
+        logger.info(f"Added {new_recipes_count} new recipes from meals")
     
     return read_recipes()
 
