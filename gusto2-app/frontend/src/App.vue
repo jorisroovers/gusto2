@@ -174,6 +174,7 @@
             v-if="!loading && !error" 
             :meals="meals" 
             :selected-date="currentMeal.Date"
+            :changed-indices="changedIndices"
             @date-selected="selectDate"
             class="calendar-section"
           />

@@ -20,11 +20,13 @@
           'weekend': date.isWeekend,
           'empty': !date.day,
           'no-meal': date.day && !date.hasMeal,
-          'current-day': isCurrentDay(date)
+          'current-day': isCurrentDay(date),
+          'changed': date.isChanged
         }"
         @click="date.day && selectDate(date)"
       >
-        {{ date.day }}
+        <span class="day-number">{{ date.day }}</span>
+        <span v-if="date.isChanged" class="changed-indicator" title="This meal has unsaved changes">*</span>
       </div>
     </div>
   </div>
@@ -41,6 +43,11 @@ export default {
     selectedDate: {
       type: String,
       required: true
+    },
+    changedIndices: {
+      type: Array,
+      required: false,
+      default: () => []
     }
   },
   data() {
@@ -102,6 +109,15 @@ export default {
         // Store the simple date string in YYYY-MM-DD format for consistency
         const dateString = this.formatDateToString(date);
         
+        // Find matching meal
+        const mealIndex = this.meals.findIndex(meal => {
+          if (!meal.Date) return false;
+          return this.formatDateToString(new Date(meal.Date)) === dateString;
+        });
+
+        // Check if this meal has changes
+        const isChanged = mealIndex !== -1 && this.changedIndices.includes(mealIndex);
+        
         days.push({
           day: i,
           isWeekend: dayOfWeek === 0 || dayOfWeek === 6,
@@ -111,7 +127,8 @@ export default {
             // Compare using our normalized date strings
             return this.formatDateToString(new Date(meal.Date)) === dateString && 
                    meal.Name && meal.Name.trim() !== '';
-          })
+          }),
+          isChanged
         });
       }
       
@@ -224,6 +241,7 @@ export default {
   cursor: pointer;
   font-size: 0.9em;
   transition: all 0.2s ease;
+  position: relative; /* Add this for absolute positioning of the asterisk */
 }
 
 .calendar-day:not(.empty):hover {
@@ -271,5 +289,14 @@ export default {
   font-size: 1.2em;
   display: inline-block;
   line-height: 1;
+}
+
+.changed-indicator {
+  color: #e74c3c;
+  font-weight: bold;
+  font-size: 1.2em;
+  position: absolute;
+  top: 0;
+  right: 2px;
 }
 </style>
