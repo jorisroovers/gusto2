@@ -288,8 +288,13 @@ def update_changeset(index, meal):
                     logger.error(f"Error parsing date {meal['Date']}: {e}")
                     return False
             
-            # Add index to changed_indices table
-            db.merge(ChangedIndexModel(index=index))
+            # Check if index already exists in changed_indices
+            existing_index = db.query(ChangedIndexModel).filter_by(index=index).first()
+            
+            # Only add to changed_indices if it doesn't already exist
+            if not existing_index:
+                changed_index = ChangedIndexModel(index=index)
+                db.add(changed_index)
             
             # Save changes
             db.commit()

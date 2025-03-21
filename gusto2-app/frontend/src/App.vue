@@ -57,6 +57,8 @@
                 <h3>{{ currentMeal.Name }}</h3>
                 <!-- Only show asterisk if current meal is in changedIndices -->
                 <span v-if="isCurrentMealChanged" class="changed-indicator" title="This meal has unsaved changes">*</span>
+                <!-- Add delete button -->
+                <button @click="deleteMeal" class="delete-button" title="Remove meal">×</button>
               </div>
               <div v-else class="no-meal-planned">
                 <h3>No meal planned</h3>
@@ -629,6 +631,40 @@ export default {
         this.showNotification('Failed to add meal to meal plan', 'error');
       }
     },
+
+    async deleteMeal() {
+      if (!confirm('Are you sure you want to remove this meal?')) {
+        return;
+      }
+
+      try {
+        // Just send empty meal data to clear the current meal
+        const response = await axios.put(`/api/meal/${this.currentIndex}`, {
+          Name: '',
+          Tags: '',
+          Notes: ''
+        });
+        
+        if (response.data.status === 'success') {
+          // Update local state
+          this.meals[this.currentIndex] = {
+            ...this.meals[this.currentIndex],
+            Name: '',
+            Tags: '',
+            Notes: ''
+          };
+          
+          // Update changed indices from server response
+          this.changedIndices = response.data.changedIndices;
+          this.hasChanges = this.changedIndices.length > 0;
+          
+          this.showNotification('Meal removed successfully!', 'success');
+        }
+      } catch (error) {
+        console.error('Error deleting meal:', error);
+        this.showNotification('Failed to remove meal', 'error');
+      }
+    },
   },
   mounted() {
     // Fetch meals when the component is mounted
@@ -734,6 +770,10 @@ header {
 
 .meal-name {
   position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
 }
 
 .meal-name h3 {
@@ -1098,5 +1138,26 @@ header {
 
 .accept-button:hover {
   background-color: #d35400;
+}
+
+.delete-button {
+  background-color: #e74c3c;
+  border: none;
+  color: white;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  padding: 0;
+  transition: background-color 0.3s;
+}
+
+.delete-button:hover {
+  background-color: #c0392b;
 }
 </style>
