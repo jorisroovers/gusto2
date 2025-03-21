@@ -67,8 +67,8 @@
                 <p v-if="currentMeal.Notes">{{ currentMeal.Notes }}</p>
                 <p v-else>&nbsp;</p>
               </div>
-              <!-- Add suggestion UI -->
-              <div v-if="!currentMeal.Name" class="suggestion-actions">
+              <!-- Add suggestion UI - now available for both empty and existing meals -->
+              <div class="suggestion-actions">
                 <button @click="suggestMeal" class="suggest-button" :disabled="loading">
                   {{ suggestedMeal ? 'Suggest Another' : 'Suggest Meal' }}
                 </button>
