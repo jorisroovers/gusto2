@@ -93,6 +93,8 @@ export default {
 <style scoped>
 .recipe-list {
   padding: 20px;
+  max-width: 1200px;
+  margin: 0 auto;
 }
 
 .recipe-controls {
@@ -102,28 +104,81 @@ export default {
 }
 
 .populate-button {
-  background-color: #3498db;
-  border: none;
-  color: white;
-  padding: 10px 20px;
-  text-align: center;
-  text-decoration: none;
-  display: inline-block;
-  font-size: 14px;
-  cursor: pointer;
+  padding: 8px 16px;
   border-radius: 4px;
-  transition: background-color 0.3s;
+  background-color: #3498db;
+  color: white;
+  border: 1px solid #2980b9;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-size: 14px;
 }
 
-.populate-button:hover {
+.populate-button:hover:not(:disabled) {
   background-color: #2980b9;
 }
 
 .populate-button:disabled {
-  background-color: #cccccc;
+  opacity: 0.6;
   cursor: not-allowed;
 }
 
+.recipes-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 20px;
+  margin-top: 20px;
+}
+
+.recipe-card {
+  background: white;
+  border-radius: 8px;
+  padding: 20px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.recipe-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.recipe-card h3 {
+  margin: 0 0 15px 0;
+  color: #2c3e50;
+  font-size: 1.2em;
+}
+
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.tag {
+  background-color: #f0f2f5;
+  color: #2c3e50;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.loading, .error, .no-recipes {
+  text-align: center;
+  padding: 40px;
+  color: #666;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.error {
+  color: #e74c3c;
+  background-color: #fdf0f0;
+}
+
+/* Using the same notification styles as MealPlanPage */
 .notification {
   padding: 10px;
   margin-bottom: 15px;
@@ -148,48 +203,5 @@ export default {
   background-color: #d1ecf1;
   color: #0c5460;
   border: 1px solid #bee5eb;
-}
-
-.recipes-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-  gap: 20px;
-  margin-top: 20px;
-}
-
-.recipe-card {
-  background: white;
-  border-radius: 8px;
-  padding: 15px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-}
-
-.recipe-card h3 {
-  margin: 0 0 10px 0;
-  color: #2c3e50;
-}
-
-.tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-}
-
-.tag {
-  background-color: #e9ecef;
-  color: #495057;
-  padding: 4px 8px;
-  border-radius: 4px;
-  font-size: 12px;
-}
-
-.loading, .error, .no-recipes {
-  text-align: center;
-  padding: 20px;
-  color: #666;
-}
-
-.error {
-  color: #dc3545;
 }
 </style>

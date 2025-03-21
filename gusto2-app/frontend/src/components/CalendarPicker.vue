@@ -199,35 +199,35 @@ export default {
 .calendar-picker {
   background: white;
   border-radius: 8px;
-  padding: 15px;
+  padding: 20px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   margin-top: 20px;
-  border-top: 1px solid #eaeaea;
 }
 
 .calendar-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 15px;
+  margin-bottom: 20px;
 }
 
 .month-display {
   font-weight: 500;
-  font-size: 1.1em;
+  font-size: 1.2em;
+  color: #2c3e50;
 }
 
 .calendar-grid {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  gap: 4px;
+  gap: 8px;
 }
 
 .weekday-header {
   text-align: center;
   font-weight: 500;
   color: #666;
-  padding: 5px;
+  padding: 8px 0;
   font-size: 0.9em;
 }
 
@@ -241,12 +241,14 @@ export default {
   cursor: pointer;
   font-size: 0.9em;
   transition: all 0.2s ease;
-  position: relative; /* Add this for absolute positioning of the asterisk */
+  position: relative;
+  background: white;
 }
 
 .calendar-day:not(.empty):hover {
   background-color: #f0f0f0;
   transform: scale(1.05);
+  z-index: 1;
 }
 
 .weekend {
@@ -256,6 +258,7 @@ export default {
 .empty {
   border: none;
   cursor: default;
+  background: transparent;
 }
 
 .no-meal {
@@ -264,20 +267,19 @@ export default {
 
 .current-day {
   background-color: #e3f2fd;
-  border-color: #2196f3;
+  border: 2px solid #2196f3;
   font-weight: bold;
+  color: #2196f3;
 }
 
 .nav-button {
   background: transparent;
   border: 1px solid #ddd;
   border-radius: 4px;
-  padding: 5px 12px;
+  padding: 8px 16px;
   cursor: pointer;
   transition: all 0.2s ease;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  color: #2c3e50;
 }
 
 .nav-button:hover {
@@ -287,8 +289,10 @@ export default {
 
 .icon {
   font-size: 1.2em;
-  display: inline-block;
   line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .changed-indicator {
@@ -296,7 +300,23 @@ export default {
   font-weight: bold;
   font-size: 1.2em;
   position: absolute;
-  top: 0;
-  right: 2px;
+  top: 2px;
+  right: 4px;
+}
+
+/* For mobile screens, make the calendar more compact */
+@media (max-width: 600px) {
+  .calendar-picker {
+    padding: 15px;
+  }
+
+  .calendar-grid {
+    gap: 4px;
+  }
+
+  .weekday-header {
+    font-size: 0.8em;
+    padding: 4px 0;
+  }
 }
 </style>

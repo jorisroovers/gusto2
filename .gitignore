@@ -16,3 +16,4 @@ docker-compose.override.yml
 .env
 
 gusto2-app/data/*
+.aider*
