@@ -73,16 +73,22 @@ export default {
       
       // Add all days of the month
       for (let i = 1; i <= lastDay; i++) {
-        const date = new Date(year, month, i);
+        // Create date at noon to avoid timezone issues
+        const date = new Date(year, month, i, 12, 0, 0);
         const dayOfWeek = date.getDay();
-        const dateString = date.toISOString().split('T')[0].replace(/-/g, '/');
+        
+        // Store the simple date string in YYYY-MM-DD format for consistency
+        const dateString = this.formatDateToString(date);
         
         days.push({
           day: i,
           isWeekend: dayOfWeek === 0 || dayOfWeek === 6,
           date: dateString,
           hasMeal: this.meals.some(meal => {
-            return meal.Date === dateString && meal.Name && meal.Name.trim() !== '';
+            if (!meal.Date) return false;
+            // Compare using our normalized date strings
+            return this.formatDateToString(new Date(meal.Date)) === dateString && 
+                   meal.Name && meal.Name.trim() !== '';
           })
         });
       }
@@ -91,19 +97,44 @@ export default {
     }
   },
   methods: {
+    // Helper method to format a date to YYYY-MM-DD consistently
+    formatDateToString(date) {
+      // Ensure we have a valid date
+      if (!(date instanceof Date) || isNaN(date.getTime())) {
+        return '';
+      }
+      
+      const year = date.getFullYear();
+      // Month is 0-based, so add 1 and pad with leading zero if needed
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      // Pad day with leading zero if needed
+      const day = String(date.getDate()).padStart(2, '0');
+      
+      return `${year}-${month}-${day}`;
+    },
+    
     previousMonth() {
       this.currentMonth = new Date(this.currentMonth.getFullYear(), this.currentMonth.getMonth() - 1);
     },
+    
     nextMonth() {
       this.currentMonth = new Date(this.currentMonth.getFullYear(), this.currentMonth.getMonth() + 1);
     },
+    
     selectDate(date) {
       if (date.date) {
         this.$emit('date-selected', date.date);
       }
     },
+    
     isCurrentDay(date) {
-      return date.date === this.selectedDate;
+      if (!date.date || !this.selectedDate) return false;
+      
+      // Convert selectedDate to our consistent format for comparison
+      const normalizedSelectedDate = this.formatDateToString(new Date(this.selectedDate));
+      
+      // Direct string comparison of normalized dates
+      return date.date === normalizedSelectedDate;
     }
   }
 };
