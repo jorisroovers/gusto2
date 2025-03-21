@@ -1,0 +1,2 @@
+- Also add the "Suggest Meal" button to existing meals, as a way to replace existing meals with something new.
+- Add a delete icon/button to the day view, which should remove the meal when clicked.

@@ -69,11 +69,11 @@
               </div>
               <!-- Add suggestion UI -->
               <div v-if="!currentMeal.Name" class="suggestion-actions">
-                <button @click="suggestRecipe" class="suggest-button" :disabled="loading">
-                  {{ suggestedRecipe ? 'Suggest Another' : 'Suggest Recipe' }}
+                <button @click="suggestMeal" class="suggest-button" :disabled="loading">
+                  {{ suggestedMeal ? 'Suggest Another' : 'Suggest Meal' }}
                 </button>
-                <div v-if="suggestedRecipe" class="suggested-recipe">
-                  <p>Suggested: {{ suggestedRecipe.Name }}</p>
+                <div v-if="suggestedMeal" class="suggested-recipe">
+                  <p>Suggested: {{ suggestedMeal.Name }}</p>
                   <button @click="acceptSuggestion" class="accept-button">Accept</button>
                 </div>
               </div>
@@ -202,10 +202,10 @@ export default {
       editedMeal: {},
       notification: '',
       notificationType: 'info',
-      hasChanges: false, // Track if there are changes on the server
-      changedIndices: [], // Track which specific indices have been changed
-      lastViewedDate: null, // Store the date of the last viewed meal
-      suggestedRecipe: null, // Add suggested recipe state
+      hasChanges: false,
+      changedIndices: [],
+      lastViewedDate: null,
+      suggestedMeal: null, // Renamed from suggestedRecipe
     };
   },
   computed: {
@@ -568,40 +568,40 @@ export default {
         this.currentIndex = selectedIndex;
       }
     },
-    async suggestRecipe() {
+    async suggestMeal() {  // Renamed from suggestRecipe
       try {
         const response = await axios.get('/api/recipes');
         const recipes = response.data.recipes;
         if (!recipes || recipes.length === 0) {
-          this.showNotification('No recipes available to suggest', 'error');
+          this.showNotification('No meals available to suggest', 'error');
           return;
         }
 
         // Filter out the current suggestion to avoid repeating it
-        const availableRecipes = recipes.filter(r => 
-          !this.suggestedRecipe || r.Name !== this.suggestedRecipe.Name
+        const availableMeals = recipes.filter(r => 
+          !this.suggestedMeal || r.Name !== this.suggestedMeal.Name
         );
 
-        if (availableRecipes.length === 0) {
-          // If we've filtered out all recipes, use the full list again
-          this.suggestedRecipe = recipes[Math.floor(Math.random() * recipes.length)];
+        if (availableMeals.length === 0) {
+          // If we've filtered out all meals, use the full list again
+          this.suggestedMeal = recipes[Math.floor(Math.random() * recipes.length)];
         } else {
-          // Pick a random recipe from available ones
-          this.suggestedRecipe = availableRecipes[Math.floor(Math.random() * availableRecipes.length)];
+          // Pick a random meal from available ones
+          this.suggestedMeal = availableMeals[Math.floor(Math.random() * availableMeals.length)];
         }
       } catch (error) {
-        console.error('Error fetching recipes:', error);
-        this.showNotification('Failed to fetch recipes for suggestion', 'error');
+        console.error('Error fetching meals:', error);
+        this.showNotification('Failed to fetch meals for suggestion', 'error');
       }
     },
 
     async acceptSuggestion() {
-      if (!this.suggestedRecipe) return;
+      if (!this.suggestedMeal) return;
 
-      // Update the current meal with the suggested recipe
+      // Update the current meal with the suggested meal
       const meal = {
-        Name: this.suggestedRecipe.Name,
-        Tags: this.suggestedRecipe.Tags,
+        Name: this.suggestedMeal.Name,
+        Tags: this.suggestedMeal.Tags,
       };
 
       try {
@@ -620,13 +620,13 @@ export default {
           this.hasChanges = this.changedIndices.length > 0;
           
           // Clear suggestion after accepting
-          this.suggestedRecipe = null;
+          this.suggestedMeal = null;
           
-          this.showNotification('Recipe added to meal plan!', 'success');
+          this.showNotification('Meal added to meal plan!', 'success');
         }
       } catch (error) {
         console.error('Error accepting suggestion:', error);
-        this.showNotification('Failed to add recipe to meal plan', 'error');
+        this.showNotification('Failed to add meal to meal plan', 'error');
       }
     },
   },
