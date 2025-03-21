@@ -42,6 +42,13 @@
     <main>
       <!-- Meal Plan View -->
       <div v-if="currentView === 'mealplan'" class="card">
+        <!-- Add calendar picker above existing meal display -->
+        <calendar-picker 
+          v-if="!loading && !error" 
+          :meals="meals" 
+          :selected-date="currentMeal.Date"
+          @date-selected="selectDate"
+        />
         <!-- Notification area for saving/reloading status -->
         <div v-if="notification" class="notification" :class="notificationType">
           {{ notification }}
@@ -163,11 +170,13 @@
 <script>
 import axios from 'axios';
 import RecipeList from './components/RecipeList.vue';
+import CalendarPicker from './components/CalendarPicker.vue';
 
 export default {
   name: 'App',
   components: {
-    RecipeList
+    RecipeList,
+    CalendarPicker
   },
   data() {
     return {
@@ -538,6 +547,13 @@ export default {
       if (!dateString) return '';
       const date = new Date(dateString);
       return date.toLocaleDateString();
+    },
+    selectDate(dateString) {
+      // Find the index of the meal with this date
+      const selectedIndex = this.meals.findIndex(meal => meal.Date === dateString);
+      if (selectedIndex !== -1) {
+        this.currentIndex = selectedIndex;
+      }
     }
   },
   mounted() {
