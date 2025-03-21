@@ -1,4 +1,4 @@
-`<template>
+<template>
   <div class="recipe-list">
     <div class="recipe-controls">
       <button 
@@ -38,6 +38,7 @@ import axios from 'axios';
 
 export default {
   name: 'RecipeList',
+  expose: ['populateFromMeals'], // Expose this method to parent components
   data() {
     return {
       recipes: [],
@@ -192,4 +193,3 @@ export default {
   color: #dc3545;
 }
 </style>
-`

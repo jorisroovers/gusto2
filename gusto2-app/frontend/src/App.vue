@@ -183,7 +183,7 @@
 
       <!-- Recipes View -->
       <div v-else-if="currentView === 'recipes'" class="card">
-        <recipe-list />
+        <recipe-list ref="recipeList" />
       </div>
     </main>
   </div>
@@ -314,6 +314,11 @@ export default {
           
           // Show success notification
           this.showNotification('Meals reloaded from server', 'info');
+
+          // Auto-populate recipes if in recipes view
+          if (this.currentView === 'recipes') {
+            await this.$refs.recipeList?.populateFromMeals();
+          }
         }
       } catch (error) {
         console.error('Error reloading meals:', error);
