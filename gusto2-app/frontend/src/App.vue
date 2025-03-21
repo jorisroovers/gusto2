@@ -58,7 +58,14 @@
                 <!-- Only show asterisk if current meal is in changedIndices -->
                 <span v-if="isCurrentMealChanged" class="changed-indicator" title="This meal has unsaved changes">*</span>
                 <!-- Add delete button -->
-                <button @click="deleteMeal" class="delete-button" title="Remove meal">×</button>
+                <div class="delete-container">
+                  <button v-if="!showDeleteConfirmation" @click="showDeleteConfirmation = true" class="delete-button" title="Remove meal">×</button>
+                  <div v-else class="delete-confirmation">
+                    <span>Delete?</span>
+                    <button @click="confirmDelete" class="confirm-yes">Yes</button>
+                    <button @click="showDeleteConfirmation = false" class="confirm-no">No</button>
+                  </div>
+                </div>
               </div>
               <div v-else class="no-meal-planned">
                 <h3>No meal planned</h3>
@@ -208,6 +215,7 @@ export default {
       changedIndices: [],
       lastViewedDate: null,
       suggestedMeal: null, // Renamed from suggestedRecipe
+      showDeleteConfirmation: false,
     };
   },
   computed: {
@@ -632,11 +640,7 @@ export default {
       }
     },
 
-    async deleteMeal() {
-      if (!confirm('Are you sure you want to remove this meal?')) {
-        return;
-      }
-
+    async confirmDelete() {
       try {
         // Just send empty meal data to clear the current meal
         const response = await axios.put(`/api/meal/${this.currentIndex}`, {
@@ -663,6 +667,8 @@ export default {
       } catch (error) {
         console.error('Error deleting meal:', error);
         this.showNotification('Failed to remove meal', 'error');
+      } finally {
+        this.showDeleteConfirmation = false;
       }
     },
   },
@@ -1159,5 +1165,57 @@ header {
 
 .delete-button:hover {
   background-color: #c0392b;
+}
+
+.delete-container {
+  position: relative;
+}
+
+.delete-confirmation {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  background-color: #fff;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 4px 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  z-index: 1;
+}
+
+.delete-confirmation span {
+  font-size: 14px;
+  color: #666;
+}
+
+.confirm-yes, .confirm-no {
+  border: none;
+  padding: 4px 8px;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: background-color 0.2s;
+}
+
+.confirm-yes {
+  background-color: #e74c3c;
+  color: white;
+}
+
+.confirm-yes:hover {
+  background-color: #c0392b;
+}
+
+.confirm-no {
+  background-color: #95a5a6;
+  color: white;
+}
+
+.confirm-no:hover {
+  background-color: #7f8c8d;
 }
 </style>
