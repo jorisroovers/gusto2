@@ -27,7 +27,7 @@
           :disabled="!hasChanges || loading"
           :title="!hasChanges ? 'No changes to save' : 'Save all changes'"
         >
-          Save All Changes
+          Save All Changes ({{ changedIndices.length }})
         </button>
         <button 
           @click="reloadMeals" 
