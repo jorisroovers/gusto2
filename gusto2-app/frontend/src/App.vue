@@ -42,13 +42,6 @@
     <main>
       <!-- Meal Plan View -->
       <div v-if="currentView === 'mealplan'" class="card">
-        <!-- Add calendar picker above existing meal display -->
-        <calendar-picker 
-          v-if="!loading && !error" 
-          :meals="meals" 
-          :selected-date="currentMeal.Date"
-          @date-selected="selectDate"
-        />
         <!-- Notification area for saving/reloading status -->
         <div v-if="notification" class="notification" :class="notificationType">
           {{ notification }}
@@ -156,6 +149,15 @@
               </button>
             </div>
           </div>
+
+          <!-- Calendar picker moved below the meal display -->
+          <calendar-picker 
+            v-if="!loading && !error" 
+            :meals="meals" 
+            :selected-date="currentMeal.Date"
+            @date-selected="selectDate"
+            class="calendar-section"
+          />
         </div>
       </div>
 

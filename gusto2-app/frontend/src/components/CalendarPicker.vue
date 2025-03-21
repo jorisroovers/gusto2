@@ -2,9 +2,13 @@
 <template>
   <div class="calendar-picker">
     <div class="calendar-header">
-      <button @click="previousMonth" class="nav-button">&lt;</button>
+      <button @click="previousMonth" class="nav-button">
+        <span class="icon">&#x2190;</span>
+      </button>
       <span class="month-display">{{ currentMonthDisplay }}</span>
-      <button @click="nextMonth" class="nav-button">&gt;</button>
+      <button @click="nextMonth" class="nav-button">
+        <span class="icon">&#x2192;</span>
+      </button>
     </div>
     <div class="calendar-grid">
       <div class="weekday-header" v-for="day in weekDays" :key="day">{{ day }}</div>
@@ -111,7 +115,8 @@ export default {
   border-radius: 8px;
   padding: 15px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  margin-bottom: 20px;
+  margin-top: 20px;
+  border-top: 1px solid #eaeaea;
 }
 
 .calendar-header {
@@ -154,6 +159,7 @@ export default {
 
 .calendar-day:not(.empty):hover {
   background-color: #f0f0f0;
+  transform: scale(1.05);
 }
 
 .weekend {
@@ -162,6 +168,7 @@ export default {
 
 .empty {
   border: none;
+  cursor: default;
 }
 
 .no-meal {
@@ -181,9 +188,19 @@ export default {
   padding: 5px 12px;
   cursor: pointer;
   transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .nav-button:hover {
   background-color: #f0f0f0;
+  border-color: #aaa;
+}
+
+.icon {
+  font-size: 1.2em;
+  display: inline-block;
+  line-height: 1;
 }
 </style>
