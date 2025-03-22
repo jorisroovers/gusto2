@@ -460,6 +460,11 @@ class RuleEngine:
         """
         suggestions = []
         
+        import random
+        # Shuffle available meals first to introduce initial randomness
+        available_meals = available_meals.copy()
+        random.shuffle(available_meals)
+        
         for meal in available_meals:
             meal_name = meal['name']
             meal_tags = meal.get('tags', '').split(',') if meal.get('tags') else []
@@ -478,8 +483,22 @@ class RuleEngine:
                     "validation_result": result
                 })
         
-        # Sort by requirement score (higher is better)
-        suggestions.sort(key=lambda x: x["requirement_score"], reverse=True)
+        # Group suggestions by score
+        score_groups = {}
+        for suggestion in suggestions:
+            score = suggestion["requirement_score"]
+            if score not in score_groups:
+                score_groups[score] = []
+            score_groups[score].append(suggestion)
+        
+        # Shuffle each group of same-scored suggestions
+        for score in score_groups:
+            random.shuffle(score_groups[score])
+        
+        # Reconstruct the suggestions list maintaining score order but with shuffled same-score items
+        suggestions = []
+        for score in sorted(score_groups.keys(), reverse=True):
+            suggestions.extend(score_groups[score])
         
         # Return the top suggestions
         return suggestions[:count]
