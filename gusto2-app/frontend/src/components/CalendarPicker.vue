@@ -39,21 +39,21 @@
           <div 
             class="validation-cell"
             :class="{
-              'validation-loading': week.validationLoading,
-              'validation-success': !week.validationLoading && week.validationResults && week.validationResults.all_constraints_met && week.validationResults.all_requirements_met,
-              'validation-error': !week.validationLoading && week.validationResults && (!week.validationResults.all_constraints_met || !week.validationResults.all_requirements_met)
+              'validation-loading': weekValidations[week.weekStart]?.loading,
+              'validation-success': !weekValidations[week.weekStart]?.loading && weekValidations[week.weekStart]?.results && weekValidations[week.weekStart]?.results.all_constraints_met && weekValidations[week.weekStart]?.results.all_requirements_met,
+              'validation-error': !weekValidations[week.weekStart]?.loading && weekValidations[week.weekStart]?.results && (!weekValidations[week.weekStart]?.results.all_constraints_met || !weekValidations[week.weekStart]?.results.all_requirements_met)
             }"
-            @click="week.validationResults && showValidationDialog(week)"
+            @click="weekValidations[week.weekStart]?.results && showValidationDialog(week)"
           >
-            <template v-if="week.validationLoading">
+            <template v-if="weekValidations[week.weekStart]?.loading">
               <span class="loading-spinner"></span>
             </template>
-            <template v-else-if="week.validationResults">
-              <template v-if="week.validationResults.all_constraints_met && week.validationResults.all_requirements_met">
+            <template v-else-if="weekValidations[week.weekStart]?.results">
+              <template v-if="weekValidations[week.weekStart]?.results.all_constraints_met && weekValidations[week.weekStart]?.results.all_requirements_met">
                 ✓
               </template>
               <template v-else>
-                {{ countFailedValidations(week.validationResults) }}
+                {{ countFailedValidations(weekValidations[week.weekStart]?.results) }}
               </template>
             </template>
           </div>
@@ -131,7 +131,8 @@ export default {
       weekDays: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
       currentMonth: new Date(),
       showingValidationResults: false,
-      selectedWeekValidations: null
+      selectedWeekValidations: null,
+      weekValidations: {},  // Store validation state separately
     };
   },
   watch: {
@@ -154,6 +155,15 @@ export default {
         }
       },
       immediate: true // Check when component is created
+    },
+    currentMonth: {
+      handler() {
+        this.weekValidations = {}; // Clear old validations
+        this.$nextTick(() => {
+          this.validateAllWeeks();
+        });
+      },
+      immediate: true
     }
   },
   computed: {
@@ -221,7 +231,7 @@ export default {
         }
       }
 
-      // Group days into weeks
+      // Group days into weeks without validation state
       const weeks = [];
       for (let i = 0; i < days.length; i += 7) {
         const weekDays = days.slice(i, i + 7);
@@ -229,13 +239,8 @@ export default {
         const week = {
           weekStart,
           days: weekDays,
-          validationResults: null,
-          validationLoading: false,
-          validationError: false
         };
         weeks.push(week);
-        // Start validation for this week
-        this.validateWeek(week);
       }
 
       return weeks;
@@ -253,9 +258,11 @@ export default {
     },
     previousMonth() {
       this.currentMonth = new Date(this.currentMonth.getFullYear(), this.currentMonth.getMonth() - 1);
+      this.validateAllWeeks();
     },
     nextMonth() {
       this.currentMonth = new Date(this.currentMonth.getFullYear(), this.currentMonth.getMonth() + 1);
+      this.validateAllWeeks();
     },
     selectDate(date) {
       if (date.date) {
@@ -284,8 +291,12 @@ export default {
     async validateWeek(week) {
       if (!week.weekStart) return;
 
-      // Set loading state
-      week.validationLoading = true;
+      // Set loading state using Vue 3 reactivity
+      this.weekValidations[week.weekStart] = {
+        loading: true,
+        error: false,
+        results: null
+      };
 
       try {
         const response = await axios.post('/api/rules/validate', {
@@ -293,19 +304,28 @@ export default {
         });
         
         if (response.data && response.data.status === 'success') {
-          week.validationResults = response.data;
+          this.weekValidations[week.weekStart] = {
+            loading: false,
+            error: false,
+            results: response.data
+          };
         }
       } catch (error) {
         console.error('Error validating week:', error);
-        week.validationError = true;
-      } finally {
-        week.validationLoading = false;
+        this.weekValidations[week.weekStart] = {
+          loading: false,
+          error: true,
+          results: null
+        };
       }
     },
 
     showValidationDialog(week) {
-      this.selectedWeekValidations = week.validationResults;
-      this.showingValidationResults = true;
+      const validation = this.weekValidations[week.weekStart];
+      if (validation && validation.results) {
+        this.selectedWeekValidations = validation.results;
+        this.showingValidationResults = true;
+      }
     },
 
     closeValidationDialog() {
@@ -332,7 +352,20 @@ export default {
         return this.formatDateToString(new Date(meal.Date)) === dateString && 
                meal.Name && meal.Name.trim() !== '';
       });
+    },
+
+    validateAllWeeks() {
+      // For each week in calendarWeeks, trigger validation
+      this.$nextTick(() => {
+        this.calendarWeeks.forEach(week => {
+          this.validateWeek(week);
+        });
+      });
     }
+  },
+  mounted() {
+    // Validate all weeks when component is mounted
+    this.validateAllWeeks();
   }
 };
 </script>
