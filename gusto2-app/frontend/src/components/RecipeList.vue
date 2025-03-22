@@ -1,6 +1,14 @@
 <template>
   <div class="recipe-list">
     <div class="recipe-controls">
+      <div class="search-container">
+        <input
+          type="text"
+          v-model="searchQuery"
+          placeholder="Search recipes..."
+          class="search-input"
+        />
+      </div>
       <button 
         @click="populateFromMeals" 
         class="populate-button"
@@ -71,18 +79,32 @@ export default {
       notification: '',
       notificationType: 'info',
       selectedRecipe: null,
-      associatedMeals: []
+      associatedMeals: [],
+      searchQuery: ''
     };
   },
   computed: {
     filteredRecipes() {
-      if (!this.selectedTags.length) return this.recipes;
+      let filtered = this.recipes;
       
-      return this.recipes.filter(recipe => {
-        if (!recipe.Tags) return false;
-        const recipeTags = recipe.Tags.split(',').map(t => t.trim().toLowerCase());
-        return this.selectedTags.every(tag => recipeTags.includes(tag.toLowerCase()));
-      });
+      // Filter by search query
+      if (this.searchQuery) {
+        const query = this.searchQuery.toLowerCase();
+        filtered = filtered.filter(recipe => 
+          recipe.Name.toLowerCase().includes(query)
+        );
+      }
+      
+      // Filter by tags
+      if (this.selectedTags.length) {
+        filtered = filtered.filter(recipe => {
+          if (!recipe.Tags) return false;
+          const recipeTags = recipe.Tags.split(',').map(t => t.trim().toLowerCase());
+          return this.selectedTags.every(tag => recipeTags.includes(tag.toLowerCase()));
+        });
+      }
+      
+      return filtered;
     },
     allTags() {
       const tagSet = new Set();
@@ -181,7 +203,29 @@ export default {
 .recipe-controls {
   margin-bottom: 1.5rem;
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+
+.search-container {
+  width: 100%;
+  max-width: 400px;
+}
+
+.search-input {
+  width: 100%;
+  padding: 0.5rem 1rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 0.95rem;
+  transition: border-color 0.2s ease;
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: #3498db;
+  box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
 }
 
 .populate-button {
