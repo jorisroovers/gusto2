@@ -97,11 +97,9 @@
                 </div>
                 <div class="form-group">
                   <label for="mealTags">Tags:</label>
-                  <input 
-                    id="mealTags" 
-                    type="text" 
-                    v-model="editedMeal.Tags" 
-                    placeholder="Enter tags (comma separated)"
+                  <tag-input 
+                    v-model="editedMeal.Tags"
+                    :suggestions="tagSuggestions"
                   />
                 </div>
               </div>
@@ -188,12 +186,14 @@
 import axios from 'axios';
 import CalendarPicker from '../components/CalendarPicker.vue';
 import MealPlanRules from '../components/MealPlanRules.vue';
+import TagInput from '../components/TagInput.vue';
 
 export default {
   name: 'MealPlanPage',
   components: {
     CalendarPicker,
-    MealPlanRules
+    MealPlanRules,
+    TagInput
   },
   data() {
     return {
@@ -211,6 +211,7 @@ export default {
       lastViewedDate: null,
       suggestedMeal: null,
       showDeleteConfirmation: false,
+      tagSuggestions: []
     };
   },
   computed: {
@@ -629,10 +630,35 @@ export default {
         console.error('Error applying rule suggestion:', error);
         this.showNotification('Failed to add rule-suggested meal to meal plan', 'error');
       }
+    },
+
+    async fetchTagSuggestions() {
+      try {
+        // Get all unique tags from both meals and recipes
+        const [mealsResponse, recipesResponse] = await Promise.all([
+          axios.get('/api/meals'),
+          axios.get('/api/recipes')
+        ]);
+
+        const mealTags = mealsResponse.data.meals
+          .flatMap(meal => meal.Tags ? meal.Tags.split(',').map(t => t.trim()) : []);
+        const recipeTags = recipesResponse.data.recipes
+          .flatMap(recipe => recipe.Tags ? recipe.Tags.split(',').map(t => t.trim()) : []);
+
+        // Combine and deduplicate tags
+        this.tagSuggestions = [...new Set([...mealTags, ...recipeTags])]
+          .filter(tag => tag) // Remove empty tags
+          .sort();
+      } catch (error) {
+        console.error('Error fetching tag suggestions:', error);
+      }
     }
   },
-  mounted() {
-    this.fetchMeals();
+  async mounted() {
+    await Promise.all([
+      this.fetchMeals(),
+      this.fetchTagSuggestions()
+    ]);
   }
 };
 </script>
