@@ -191,13 +191,13 @@ class WeeklyRequirementRule(Rule):
         meals_df = meals_df.copy()
         meals_df['Date'] = pd.to_datetime(meals_df['Date'])
         
-        # If no date specified, group by week and check each week
+        # If no date specified, group by ISO week and check each week
         if date is None:
-            # Group by week
+            # Group by ISO week (Monday-based)
             meals_df['Week'] = meals_df['Date'].dt.isocalendar().week
             meals_df['Year'] = meals_df['Date'].dt.isocalendar().year
             
-            # Each (year, week) tuple is a complete week
+            # Each (year, week) tuple is a complete Monday-Sunday week
             weeks = meals_df.groupby(['Year', 'Week'])
             
             for (year, week), week_meals in weeks:
@@ -208,16 +208,15 @@ class WeeklyRequirementRule(Rule):
                         tag_count += 1
                 
                 if tag_count < self.occurrences:
-                    return False, f"Week {week} of {year} has only {tag_count} meals with tag '{self.tag}', but {self.occurrences} are required"
+                    # Get Monday's date for this week
+                    monday_date = week_meals['Date'].min().strftime('%Y-%m-%d')
+                    return False, f"Week starting {monday_date} has only {tag_count} meals with tag '{self.tag}', but {self.occurrences} are required"
             
             return True, f"All weeks have at least {self.occurrences} meals with tag '{self.tag}'"
         else:
-            # For a specific date, check just that week
-            week_start = date - timedelta(days=date.weekday())
-            week_end = week_start + timedelta(days=6)
-            
-            # Filter to the relevant week
-            week_meals = meals_df[(meals_df['Date'] >= week_start) & (meals_df['Date'] <= week_end)]
+            # For a specific date, check just that ISO week (Monday-Sunday)
+            iso_calendar = date.isocalendar()
+            week_meals = meals_df[meals_df['Date'].dt.isocalendar().week == iso_calendar.week]
             
             # Count meals with the required tag
             tag_count = 0
@@ -226,7 +225,9 @@ class WeeklyRequirementRule(Rule):
                     tag_count += 1
             
             if tag_count < self.occurrences:
-                return False, f"Week of {date.strftime('%Y-%m-%d')} has only {tag_count} meals with tag '{self.tag}', but {self.occurrences} are required"
+                # Get Monday's date for this week
+                week_start = date - timedelta(days=date.weekday())
+                return False, f"Week starting {week_start.strftime('%Y-%m-%d')} has only {tag_count} meals with tag '{self.tag}', but {self.occurrences} are required"
             
             return True, f"Week has at least {self.occurrences} meals with tag '{self.tag}'"
 
