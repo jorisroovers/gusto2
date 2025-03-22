@@ -377,6 +377,8 @@ export default {
   padding: 1.25rem;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   width: 100%;
+  max-width: 800px; /* Add max-width to control overall size */
+  margin: 0 auto;
 }
 
 .calendar-header {
@@ -392,13 +394,24 @@ export default {
   color: #2c3e50;
   text-align: center;
   min-width: 140px;
+  margin: 0 1rem; /* Add margin to prevent affecting grid layout */
 }
 
 .calendar-grid {
   display: grid;
-  grid-template-columns: repeat(8, 1fr);
+  grid-template-columns: repeat(7, minmax(0, 1fr)) minmax(40px, 0.8fr); /* Update columns to ensure validation column has min width */
   gap: 4px;
-  aspect-ratio: 8/6;
+  width: 100%;
+  margin-top: 1rem;
+}
+
+/* Add visual separation for validation column */
+.validation-cell, 
+.weekday-header:last-child {
+  border-left: 2px solid #e0e0e0;
+  margin-left: 4px;
+  padding-left: 4px;
+  background-color: #fafafa; /* Light background to enhance separation */
 }
 
 .weekday-header {
@@ -411,6 +424,7 @@ export default {
 
 .calendar-day {
   aspect-ratio: 1;
+  width: 100%; /* Ensure day cells take full width */
   display: flex;
   align-items: center;
   justify-content: center;
@@ -487,8 +501,16 @@ export default {
 /* For mobile screens, ensure calendar stays readable */
 @media (max-width: 1023px) {
   .calendar-picker {
-    max-width: 400px;
-    margin: 0 auto;
+    max-width: 100%;
+    padding: 1rem;
+  }
+  
+  .calendar-grid {
+    gap: 2px;
+  }
+  
+  .weekday-header {
+    font-size: 0.8rem;
   }
 }
 
