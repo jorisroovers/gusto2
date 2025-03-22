@@ -54,12 +54,14 @@ export default {
 <style scoped>
 .recipes-page {
   width: 100%;
+  height: calc(100vh - 60px); /* Adjust height based on your header height */
 }
 
 .content-wrapper {
   max-width: 1400px;
   margin: 0 auto;
   padding: 0 1rem;
+  height: 100%;
 }
 
 .recipes-layout {
@@ -67,6 +69,7 @@ export default {
   grid-template-columns: 1fr 250px;
   gap: 2rem;
   align-items: start;
+  height: 100%;
 }
 
 .tags-sidebar {
@@ -76,17 +79,25 @@ export default {
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   position: sticky;
   top: 2rem;
+  max-height: calc(100vh - 100px); /* Adjust based on header + margins */
+  overflow-y: auto;
 }
 
 .tags-sidebar h3 {
   margin: 0 0 1rem 0;
   color: #2c3e50;
+  position: sticky;
+  top: 0;
+  background: white;
+  padding-bottom: 0.5rem;
+  z-index: 1;
 }
 
 .tags-list {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+  overflow-y: auto;
 }
 
 .filter-tag {
@@ -116,11 +127,18 @@ export default {
   .tags-sidebar {
     position: static;
     margin-bottom: 2rem;
+    max-height: none;
+    overflow-y: visible;
   }
   
   .tags-list {
     flex-direction: row;
     flex-wrap: wrap;
+    overflow-y: visible;
+  }
+  
+  .tags-sidebar h3 {
+    position: static;
   }
 }
 </style>

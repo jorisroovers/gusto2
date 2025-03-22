@@ -74,7 +74,7 @@ export default {
             .forEach(tag => tagSet.add(tag));
         }
       });
-      return Array.from(tagSet).sort();
+      return Array.from(tagSet).sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
     }
   },
   methods: {

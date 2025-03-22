@@ -1,7 +1,5 @@
-
-On the recipe page, show all tags on the right hand side and allow filtering of the recipes based on one or more selected tags.
-
 When filtering on tags in the recipe page, also show a list of the meals that have those tags.
+
 
 When clicking Get Rule-Based Suggestions, get different suggestions every time - the logic of the suggested meals itself shouldn't change.
 
