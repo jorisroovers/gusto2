@@ -65,7 +65,7 @@ import axios from 'axios';
 
 export default {
   name: 'RecipeList',
-  expose: ['populateFromMeals'],
+  expose: ['fetchRecipes', 'populateFromMeals'],
   props: {
     selectedTags: {
       type: Array,
@@ -121,16 +121,19 @@ export default {
     }
   },
   methods: {
-    async loadRecipes() {
+    async fetchRecipes() {
       this.loading = true;
       this.error = null;
       try {
         const response = await axios.get('/api/recipes');
-        this.recipes = response.data.recipes;
-        this.$parent.updateAvailableTags(this.allTags);
+        if (response.data && response.data.recipes) {
+          this.recipes = response.data.recipes;
+          this.$parent.updateAvailableTags(this.allTags);
+        } else {
+          throw new Error('Unexpected response format');
+        }
       } catch (error) {
-        console.error('Error loading recipes:', error);
-        this.error = 'Failed to load recipes';
+        this.error = 'Failed to load recipes: ' + (error.response?.data?.detail || error.message);
       } finally {
         this.loading = false;
       }
@@ -144,7 +147,6 @@ export default {
         this.$parent.updateAvailableTags(this.allTags);
         this.showNotification('Recipes populated from meal plan', 'success');
       } catch (error) {
-        console.error('Error populating recipes:', error);
         this.showNotification('Failed to populate recipes', 'error');
       } finally {
         this.loading = false;
@@ -173,7 +175,6 @@ export default {
           );
         }
       } catch (error) {
-        console.error('Error fetching associated meals:', error);
         this.showNotification('Failed to fetch associated meals', 'error');
       }
     },
@@ -190,8 +191,8 @@ export default {
       });
     }
   },
-  mounted() {
-    this.loadRecipes();
+  async mounted() {
+    await this.fetchRecipes();
   }
 };
 </script>

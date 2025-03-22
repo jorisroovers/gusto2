@@ -13,6 +13,9 @@ services:
     environment:
       - NOTION_API_TOKEN=${NOTION_API_TOKEN}
       - NOTION_MEALPLAN_PAGE_ID=${NOTION_MEALPLAN_PAGE_ID}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_MODEL=${OPENAI_MODEL}
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL}
 
   gusto2-frontend:
     build: 

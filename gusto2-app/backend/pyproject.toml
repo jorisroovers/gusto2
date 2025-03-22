@@ -16,6 +16,7 @@ dependencies = [
     "pandas>=2.2.3",
     "requests>=2.31.0",
     "sqlalchemy",  # Adding SQLAlchemy for database ORM
+    "openai>=1.0.0",  # For recipe suggestions
 ]
 
 [build-system]

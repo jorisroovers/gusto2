@@ -1,6 +1,6 @@
 Make App name clickable, the mealplan should be the homepage.
 
-In the rule that checks whether meals are not planned more than once in 3 weeks, deeplink the violating meals to the recipes page, so when the meal is clicked in the violatino message it should go to the recipe page showing that recipe (and including all the meals planned for that recipe, which is already implemented).
+
 
 Recipes should be auto-populated when loading meals, so that we don't have to explicitly click the populate from meal plan button.
 
@@ -17,3 +17,10 @@ The suggest-recipe backend API should do an API call to chatGPT 4o to retrieve a
 
 More requirements:
 - Steak once a month
+
+
+Add new Order page which has a list of meals for the next 7 days. 
+
+
+-------
+In the rule that checks whether meals are not planned more than once in 3 weeks, deeplink the violating meals to the recipes page, so when the meal is clicked in the violatino message it should go to the recipe page showing that recipe (and including all the meals planned for that recipe, which is already implemented).

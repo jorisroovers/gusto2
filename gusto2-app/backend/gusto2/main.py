@@ -8,9 +8,20 @@ import logging
 from datetime import datetime, timedelta
 import requests
 import json
+from openai import AsyncOpenAI
+import random
 
 # Import from our database module
 from gusto2 import database
+
+# Example recipes will be loaded from database, but if database is empty, use these fallback examples
+FALLBACK_EXAMPLE_RECIPES = [
+    {"name": "Mediterranean Quinoa Bowl", "tags": ["mediterranean", "vegetarian", "healthy", "lunch", "bowl"]},
+    {"name": "Spicy Thai Basil Chicken", "tags": ["thai", "spicy", "chicken", "dinner", "quick"]},
+    {"name": "Classic Beef Bourguignon", "tags": ["french", "beef", "stew", "dinner", "winter"]},
+    {"name": "Crispy Falafel Wrap", "tags": ["middle-eastern", "vegetarian", "lunch", "wrap"]},
+    {"name": "Japanese Miso Ramen", "tags": ["japanese", "soup", "noodles", "dinner", "umami"]}
+]
 
 # Import from our rules module
 try:
@@ -49,6 +60,17 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# OpenAI configuration
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
+OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4-turbo-preview")
+OPENAI_BASE_URL = os.environ.get("OPENAI_BASE_URL")
+
+# Initialize OpenAI client with optional base_url
+openai_client_kwargs = {"api_key": OPENAI_API_KEY}
+if OPENAI_BASE_URL:
+    openai_client_kwargs["base_url"] = OPENAI_BASE_URL
+openai_client = AsyncOpenAI(**openai_client_kwargs)
 
 # Notion API configuration
 NOTION_API_TOKEN = os.environ.get("NOTION_API_TOKEN")
@@ -340,7 +362,6 @@ async def get_meals():
         }
         
     except Exception as e:
-        logger.error(f"Failed to get meals: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get meals: {str(e)}")
 
 @app.put("/api/meal/{index}")
@@ -676,14 +697,94 @@ async def suggest_meals(suggestion_request: MealSuggestionRequest):
 
 @app.get("/api/suggest-recipe")
 async def suggest_recipe():
-    """Return a hardcoded recipe suggestion"""
-    return {
-        "recipe": {
-            "name": "Spaghetti Carbonara",
-            "tags": ["Italian", "Pasta", "Quick", "Easy"],
-            "id": "suggestion-1"  # Adding an ID to track this suggestion
+    """Get a recipe suggestion using OpenAI"""
+    if not OPENAI_API_KEY:
+        raise HTTPException(status_code=500, detail="OpenAI API key not configured")
+    
+    try:
+        # Get existing recipes for context
+        recipes_df = database.read_recipes()
+        existing_recipes = recipes_df['Name'].tolist() if not recipes_df.empty else []
+        
+        # Get 5 random example recipes for the prompt
+        example_recipes = random.sample(FALLBACK_EXAMPLE_RECIPES, 5)
+        example_json = json.dumps(example_recipes[0], indent=2)
+        
+        # Create a prompt that includes existing recipes for context
+        system_prompt = """You are a cooking expert that suggests recipes. 
+        You must respond with a raw JSON object (no markdown, no backticks, no formatting).
+        The response must be a single JSON object with exactly this structure:
+        {
+            "name": "Recipe Name",
+            "tags": ["tag1", "tag2", ...]
         }
-    }
+        Do not include any explanation, markdown formatting, or additional text.
+        The name should be descriptive and unique. Tags should include cuisine type, meal type, dietary info, etc."""
+        
+        user_prompt = f"""Generate a recipe suggestion as a raw JSON object.
+        
+        Here are some EXAMPLE recipes to show the expected format and style (these are just examples, do not copy them):
+        {json.dumps([r["name"] + ": " + ", ".join(r["tags"]) for r in example_recipes], indent=2)}
+        
+        Current recipes in user's collection:
+        {', '.join(existing_recipes[:5]) if existing_recipes else 'No existing recipes yet'}
+        
+        Remember to return ONLY a JSON object with 'name' and 'tags' fields.
+        No markdown, no backticks, no explanation text.
+        Format example:
+        {example_json}"""
+        
+        logger.info("Calling OpenAI API with prompts:")
+        logger.info(f"System prompt: {system_prompt}")
+        logger.info(f"User prompt: {user_prompt}")
+        
+        # Call OpenAI API
+        response = await openai_client.chat.completions.create(
+            model=OPENAI_MODEL,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            temperature=0.7,
+            response_format={ "type": "json" },
+            max_tokens=300
+        )
+        
+        # Log the complete response
+        logger.info("OpenAI API Response:")
+        logger.info(f"Model used: {response.model}")
+        logger.info(f"Response ID: {response.id}")
+        logger.info(f"Raw content: {response.choices[0].message.content}")
+        logger.info(f"Finish reason: {response.choices[0].finish_reason}")
+        logger.info(f"Prompt tokens: {response.usage.prompt_tokens}")
+        logger.info(f"Completion tokens: {response.usage.completion_tokens}")
+        logger.info(f"Total tokens: {response.usage.total_tokens}")
+        
+        # Extract the recipe suggestion and clean up any markdown formatting
+        suggestion = response.choices[0].message.content
+        # Remove any markdown code block markers
+        suggestion = suggestion.strip().replace('```json', '').replace('```', '').strip()
+        
+        # Parse the cleaned JSON
+        suggestion_data = json.loads(suggestion)
+        
+        # Log the parsed suggestion
+        logger.info(f"Parsed suggestion data: {json.dumps(suggestion_data, indent=2)}")
+        
+        # Generate a unique ID for this suggestion
+        suggestion_id = f"suggestion-{random.randint(1000, 9999)}"
+        
+        return {
+            "recipe": {
+                "name": suggestion_data.get("name", ""),
+                "tags": suggestion_data.get("tags", []),
+                "id": suggestion_id
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to get recipe suggestion: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get recipe suggestion: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn

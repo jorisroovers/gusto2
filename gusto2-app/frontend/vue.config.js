@@ -6,5 +6,10 @@ module.exports = {
         changeOrigin: true
       }
     }
+  },
+  configureWebpack: {
+    optimization: {
+      nodeEnv: process.env.NODE_ENV
+    }
   }
 }

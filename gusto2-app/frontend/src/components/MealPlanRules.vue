@@ -145,7 +145,6 @@ export default {
           throw new Error('Unexpected response format');
         }
       } catch (error) {
-        console.error('Error validating meal plan:', error);
         this.error = 'Failed to validate meal plan: ' + (error.response?.data?.detail || error.message);
       } finally {
         this.loading = false;
@@ -174,7 +173,6 @@ export default {
           throw new Error('Unexpected response format');
         }
       } catch (error) {
-        console.error('Error getting meal suggestions:', error);
         this.error = 'Failed to get meal suggestions: ' + (error.response?.data?.detail || error.message);
       } finally {
         this.loading = false;

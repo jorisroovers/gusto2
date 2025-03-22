@@ -240,7 +240,6 @@ export default {
               this.hasChanges = this.changedIndices.length > 0;
             }
           } catch (changesError) {
-            console.error('Error fetching changes:', changesError);
             this.changedIndices = [];
             this.hasChanges = false;
           }
@@ -250,7 +249,6 @@ export default {
           this.error = 'No meals data found';
         }
       } catch (error) {
-        console.error('Error fetching meals:', error);
         this.error = 'Error fetching meals from backend';
       } finally {
         this.loading = false;
@@ -274,7 +272,6 @@ export default {
           throw new Error('Unexpected response from server');
         }
       } catch (error) {
-        console.error('Error saving all changes:', error);
         this.showNotification('Failed to save changes: ' + (error.response?.data?.detail || error.message), 'error');
       } finally {
         this.loading = false;
@@ -300,7 +297,6 @@ export default {
           this.showNotification('Meals reloaded from server', 'info');
         }
       } catch (error) {
-        console.error('Error reloading meals:', error);
         this.showNotification('Failed to reload meals: ' + (error.response?.data?.detail || error.message), 'error');
       } finally {
         this.loading = false;
@@ -394,7 +390,6 @@ export default {
         this.editMode = false;
         this.editedMeal = {};
       } catch (error) {
-        console.error('Error saving meal:', error);
         this.showNotification('Failed to update meal', 'error');
       } finally {
         this.loading = false;
@@ -531,25 +526,28 @@ export default {
     
     async suggestMeal() {
       try {
-        const response = await axios.get('/api/recipes');
-        const recipes = response.data.recipes;
+        const recipesResponse = await axios.get('/api/recipes');
+        const recipes = recipesResponse.data.recipes;
+        
         if (!recipes || recipes.length === 0) {
-          this.showNotification('No meals available to suggest', 'error');
+          this.showNotification('No recipes available to suggest', 'error');
           return;
         }
 
-        const availableMeals = recipes.filter(r => 
+        // Filter out the current suggestion if we have one
+        const availableRecipes = recipes.filter(r => 
           !this.suggestedMeal || r.Name !== this.suggestedMeal.Name
         );
 
-        if (availableMeals.length === 0) {
+        if (availableRecipes.length === 0) {
+          // If we've shown all recipes, reset and use the full list
           this.suggestedMeal = recipes[Math.floor(Math.random() * recipes.length)];
         } else {
-          this.suggestedMeal = availableMeals[Math.floor(Math.random() * availableMeals.length)];
+          // Pick a random recipe from the available ones
+          this.suggestedMeal = availableRecipes[Math.floor(Math.random() * availableRecipes.length)];
         }
       } catch (error) {
-        console.error('Error fetching meals:', error);
-        this.showNotification('Failed to fetch meals for suggestion', 'error');
+        this.showNotification('Failed to fetch recipes for suggestion', 'error');
       }
     },
 
@@ -558,7 +556,7 @@ export default {
 
       const meal = {
         Name: this.suggestedMeal.Name,
-        Tags: this.suggestedMeal.Tags ? this.suggestedMeal.Tags.split(',').map(t => t.trim().toLowerCase()).join(',') : ''
+        Tags: this.suggestedMeal.Tags || ''
       };
 
       try {
@@ -575,11 +573,10 @@ export default {
           
           this.suggestedMeal = null;
           
-          this.showNotification('Meal added to meal plan!', 'success');
+          this.showNotification('Recipe added to meal plan!', 'success');
         }
       } catch (error) {
-        console.error('Error accepting suggestion:', error);
-        this.showNotification('Failed to add meal to meal plan', 'error');
+        this.showNotification('Failed to add recipe to meal plan', 'error');
       }
     },
 
@@ -605,7 +602,6 @@ export default {
           this.showNotification('Meal removed successfully!', 'success');
         }
       } catch (error) {
-        console.error('Error deleting meal:', error);
         this.showNotification('Failed to remove meal', 'error');
       } finally {
         this.showDeleteConfirmation = false;
@@ -618,8 +614,7 @@ export default {
         // Create the meal data structure expected by the backend
         const mealData = {
           Name: meal.name,
-          Tags: meal.tags || '',
-          Notes: ''
+          Tags: meal.tags || ''
         };
         
         const response = await axios.put(`/api/meal/${index}`, mealData);
@@ -637,7 +632,6 @@ export default {
           this.showNotification('Rule-suggested meal added to meal plan!', 'success');
         }
       } catch (error) {
-        console.error('Error applying rule suggestion:', error);
         this.showNotification('Failed to add rule-suggested meal to meal plan', 'error');
       }
     },

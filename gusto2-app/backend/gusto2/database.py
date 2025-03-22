@@ -1,15 +1,10 @@
 import os
 import pandas as pd
-import logging
 from datetime import datetime
 import json
 from sqlalchemy import create_engine, Column, Integer, String, Date, Text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
-
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 # Path to the data directory - with fallback to a writable location
 DEFAULT_DATA_DIR = "/app/data"
@@ -17,21 +12,14 @@ if not os.path.exists(DEFAULT_DATA_DIR) or not os.access(DEFAULT_DATA_DIR, os.W_
     # Fallback to a directory we know is writable
     home_dir = os.path.expanduser("~")
     DATA_DIR = os.path.join(home_dir, ".gusto2")
-    logger.warning(f"Default data directory {DEFAULT_DATA_DIR} not writable, using {DATA_DIR} instead")
 else:
     DATA_DIR = DEFAULT_DATA_DIR
 
 # Ensure data directory exists
 os.makedirs(DATA_DIR, exist_ok=True)
 
-# Log where we're storing data
-logger.info(f"Using data directory: {DATA_DIR}")
-
 # Database setup
 DATABASE_URL = f"sqlite:///{os.path.join(DATA_DIR, 'gusto2.db')}"
-
-# Log database location
-logger.info(f"Database URL: {DATABASE_URL}")
 
 # Global variables
 notion_page_ids = {}  # Map dates to Notion page IDs (in-memory cache)
@@ -79,9 +67,7 @@ def init_db():
         # Drop and recreate all tables
         Base.metadata.drop_all(bind=engine)
         Base.metadata.create_all(bind=engine)
-        logger.info("Database tables created successfully")
     except Exception as e:
-        logger.error(f"Error initializing database: {e}")
         raise
 
 # Load Notion page IDs from database to in-memory cache
@@ -93,10 +79,7 @@ def load_notion_page_ids():
             
             # Populate in-memory cache
             notion_page_ids = {record.date_str: record.page_id for record in page_id_records}
-            
-        logger.info(f"Loaded {len(notion_page_ids)} Notion page IDs from database")
     except Exception as e:
-        logger.error(f"Error loading Notion page IDs from database: {e}")
         notion_page_ids = {}
     
     return notion_page_ids
@@ -124,7 +107,6 @@ def save_notion_page_id(date_str, page_id):
             
         return True
     except Exception as e:
-        logger.error(f"Error saving Notion page ID for date {date_str}: {e}")
         return False
 
 # Save all Notion page IDs to database
@@ -149,10 +131,8 @@ def save_notion_page_ids():
             
             db.commit()
             
-        logger.info(f"Saved {len(notion_page_ids)} Notion page IDs to database")
         return True
     except Exception as e:
-        logger.error(f"Error saving Notion page IDs to database: {e}")
         return False
 
 # Get Notion page ID for a specific date
@@ -170,7 +150,7 @@ def get_notion_page_id(date_str):
                 notion_page_ids[date_str] = record.page_id
                 return record.page_id
     except Exception as e:
-        logger.error(f"Error getting Notion page ID for date {date_str}: {e}")
+        pass
     
     return None
 
@@ -208,7 +188,6 @@ def read_meals():
         
         return meals_df
     except Exception as e:
-        logger.error(f"Error reading meals from database: {str(e)}")
         # Return empty dataframe
         return pd.DataFrame(columns=["Date", "Weekday", "Name", "Tags", "Notes"])
 
@@ -219,7 +198,6 @@ def get_changed_indices():
             changed_indices_records = db.query(ChangedIndexModel).all()
             return {record.index for record in changed_indices_records}
     except Exception as e:
-        logger.error(f"Error loading changed indices from database: {e}")
         return set()
 
 def save_changed_indices(indices_set):
@@ -237,7 +215,6 @@ def save_changed_indices(indices_set):
             
         return True
     except Exception as e:
-        logger.error(f"Error saving changed indices to database: {e}")
         return False
 
 def df_to_json(df):
@@ -262,7 +239,6 @@ def update_changeset(index, meal):
             meals = db.query(MealModel).order_by(MealModel.date).all()
             
             if index < 0 or index >= len(meals):
-                logger.error(f"Invalid meal index: {index}")
                 return False
             
             # Get the meal to update
@@ -285,7 +261,6 @@ def update_changeset(index, meal):
                     db_meal.date = date_obj
                     db_meal.weekday = date_obj.strftime('%A')
                 except Exception as e:
-                    logger.error(f"Error parsing date {meal['Date']}: {e}")
                     return False
             
             # Check if index already exists in changed_indices
@@ -301,7 +276,6 @@ def update_changeset(index, meal):
             
         return True
     except Exception as e:
-        logger.error(f"Error updating meal at index {index}: {str(e)}")
         return False
 
 def read_recipes():
@@ -330,7 +304,6 @@ def read_recipes():
         
         return recipes_df
     except Exception as e:
-        logger.error(f"Error reading recipes from database: {str(e)}")
         # Return empty dataframe
         return pd.DataFrame(columns=["Name", "Tags"])
 
@@ -366,7 +339,6 @@ def save_recipes(df):
         
         return True
     except Exception as e:
-        logger.error(f"Error saving recipes to database: {str(e)}")
         return False
 
 def populate_recipes_from_meals():
@@ -393,9 +365,6 @@ def populate_recipes_from_meals():
             if save_recipes(recipe_df):
                 new_recipes_count += 1
                 existing_names.add(name)  # Add to set to avoid duplicates
-    
-    if new_recipes_count > 0:
-        logger.info(f"Added {new_recipes_count} new recipes from meals")
     
     return read_recipes()
 
@@ -425,7 +394,6 @@ def save_meals_to_db(meals_df):
                         weekday = date_obj.strftime('%A')
                         date_str = date_obj.strftime('%Y/%m/%d')
                     except Exception as e:
-                        logger.error(f"Error parsing date {row['Date']}: {e}")
                         continue
                 
                 # Get notion page id if available
@@ -451,5 +419,4 @@ def save_meals_to_db(meals_df):
         
         return True
     except Exception as e:
-        logger.error(f"Error saving meals to database: {str(e)}")
         return False
