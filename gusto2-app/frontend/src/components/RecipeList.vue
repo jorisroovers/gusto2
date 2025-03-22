@@ -18,7 +18,7 @@
     <div v-else-if="error" class="error">{{ error }}</div>
     <div v-else-if="recipes.length === 0" class="no-recipes">No recipes found</div>
     <div v-else class="recipes-grid">
-      <div v-for="recipe in recipes" :key="recipe.Name" class="recipe-card">
+      <div v-for="recipe in filteredRecipes" :key="recipe.Name" class="recipe-card">
         <h3>{{ recipe.Name }}</h3>
         <div class="tags" v-if="recipe.Tags">
           <span v-for="tag in recipe.Tags.split(',')" 
@@ -38,7 +38,13 @@ import axios from 'axios';
 
 export default {
   name: 'RecipeList',
-  expose: ['populateFromMeals'], // Expose this method to parent components
+  expose: ['populateFromMeals'],
+  props: {
+    selectedTags: {
+      type: Array,
+      default: () => []
+    }
+  },
   data() {
     return {
       recipes: [],
@@ -48,6 +54,29 @@ export default {
       notificationType: 'info'
     };
   },
+  computed: {
+    filteredRecipes() {
+      if (!this.selectedTags.length) return this.recipes;
+      
+      return this.recipes.filter(recipe => {
+        if (!recipe.Tags) return false;
+        const recipeTags = recipe.Tags.split(',').map(t => t.trim());
+        return this.selectedTags.every(tag => recipeTags.includes(tag));
+      });
+    },
+    allTags() {
+      const tagSet = new Set();
+      this.recipes.forEach(recipe => {
+        if (recipe.Tags) {
+          recipe.Tags.split(',')
+            .map(t => t.trim())
+            .filter(t => t)
+            .forEach(tag => tagSet.add(tag));
+        }
+      });
+      return Array.from(tagSet).sort();
+    }
+  },
   methods: {
     async loadRecipes() {
       this.loading = true;
@@ -55,6 +84,7 @@ export default {
       try {
         const response = await axios.get('/api/recipes');
         this.recipes = response.data.recipes;
+        this.$parent.updateAvailableTags(this.allTags);
       } catch (error) {
         console.error('Error loading recipes:', error);
         this.error = 'Failed to load recipes';
@@ -68,6 +98,7 @@ export default {
       try {
         const response = await axios.post('/api/recipes/populate');
         this.recipes = response.data.recipes;
+        this.$parent.updateAvailableTags(this.allTags);
         this.showNotification('Recipes populated from meal plan', 'success');
       } catch (error) {
         console.error('Error populating recipes:', error);
