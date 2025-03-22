@@ -60,8 +60,8 @@ export default {
       
       return this.recipes.filter(recipe => {
         if (!recipe.Tags) return false;
-        const recipeTags = recipe.Tags.split(',').map(t => t.trim());
-        return this.selectedTags.every(tag => recipeTags.includes(tag));
+        const recipeTags = recipe.Tags.split(',').map(t => t.trim().toLowerCase());
+        return this.selectedTags.every(tag => recipeTags.includes(tag.toLowerCase()));
       });
     },
     allTags() {

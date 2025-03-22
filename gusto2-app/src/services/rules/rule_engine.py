@@ -179,7 +179,8 @@ class WeeklyRequirementRule(Rule):
             type=RuleType.REQUIREMENT,
             scope=RuleScope.WEEK
         )
-        self.tag = tag
+        # Store tag in lowercase to ensure case-insensitive comparison
+        self.tag = tag.lower()
         self.occurrences = occurrences
     
     def validate(self, meals_df: pd.DataFrame, date: Optional[datetime] = None) -> Tuple[bool, str]:
@@ -204,8 +205,10 @@ class WeeklyRequirementRule(Rule):
                 # Count meals with the required tag
                 tag_count = 0
                 for _, row in week_meals.iterrows():
-                    if pd.notna(row['Tags']) and self.tag in row['Tags'].split(','):
-                        tag_count += 1
+                    if pd.notna(row['Tags']):
+                        meal_tags = [t.strip().lower() for t in row['Tags'].split(',')]
+                        if self.tag in meal_tags:
+                            tag_count += 1
                 
                 if tag_count < self.occurrences:
                     # Get Monday's date for this week
@@ -221,8 +224,10 @@ class WeeklyRequirementRule(Rule):
             # Count meals with the required tag
             tag_count = 0
             for _, row in week_meals.iterrows():
-                if pd.notna(row['Tags']) and self.tag in row['Tags'].split(','):
-                    tag_count += 1
+                if pd.notna(row['Tags']):
+                    meal_tags = [t.strip().lower() for t in row['Tags'].split(',')]
+                    if self.tag in meal_tags:
+                        tag_count += 1
             
             if tag_count < self.occurrences:
                 # Get Monday's date for this week
@@ -241,6 +246,8 @@ class WeeklyRequirementRule(Rule):
         # This is a requirement, not a constraint, so meals can always be added
         # But we'll check if it helps meet the requirement
         
+        meal_tags = [t.lower() for t in meal_tags] if meal_tags else []
+        
         if not meal_tags:
             return True, f"Meal doesn't have the '{self.tag}' tag, so doesn't help meet the weekly requirement"
         
@@ -253,18 +260,17 @@ class WeeklyRequirementRule(Rule):
         meals_df = meals_df.copy()
         meals_df['Date'] = pd.to_datetime(meals_df['Date'])
         
-        # Check the week for this date
-        week_start = date - timedelta(days=date.weekday())
-        week_end = week_start + timedelta(days=6)
-        
-        # Filter to the relevant week
-        week_meals = meals_df[(meals_df['Date'] >= week_start) & (meals_df['Date'] <= week_end)]
+        # Get the ISO week for this date (Monday-based)
+        iso_calendar = date.isocalendar()
+        week_meals = meals_df[meals_df['Date'].dt.isocalendar().week == iso_calendar.week]
         
         # Count existing meals with the required tag
         tag_count = 0
         for _, row in week_meals.iterrows():
-            if pd.notna(row['Tags']) and self.tag in row['Tags'].split(','):
-                tag_count += 1
+            if pd.notna(row['Tags']):
+                week_meal_tags = [t.strip().lower() for t in row['Tags'].split(',')]
+                if self.tag in week_meal_tags:
+                    tag_count += 1
         
         if tag_count >= self.occurrences:
             return True, f"Weekly requirement for '{self.tag}' ({self.occurrences} meals) already met ({tag_count} meals)"

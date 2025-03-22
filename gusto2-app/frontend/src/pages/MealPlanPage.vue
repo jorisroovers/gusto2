@@ -375,9 +375,15 @@ export default {
     async saveMeal() {
       this.loading = true;
       try {
-        const response = await axios.put(`/api/meal/${this.currentIndex}`, this.editedMeal);
+        // Convert tags to lowercase before saving
+        const mealData = {
+          ...this.editedMeal,
+          Tags: this.editedMeal.Tags ? this.editedMeal.Tags.split(',').map(t => t.trim().toLowerCase()).join(',') : ''
+        };
         
-        this.meals[this.currentIndex] = { ...this.editedMeal };
+        const response = await axios.put(`/api/meal/${this.currentIndex}`, mealData);
+        
+        this.meals[this.currentIndex] = { ...mealData };
         
         this.hasChanges = true;
         this.changedIndices = response.data.changedIndices || [];
@@ -551,7 +557,7 @@ export default {
 
       const meal = {
         Name: this.suggestedMeal.Name,
-        Tags: this.suggestedMeal.Tags,
+        Tags: this.suggestedMeal.Tags ? this.suggestedMeal.Tags.split(',').map(t => t.trim().toLowerCase()).join(',') : ''
       };
 
       try {

@@ -84,6 +84,11 @@ class NoRepeatInWindowRule(Rule):
         if meals_df.empty:
             return True, "No meals to validate"
         
+        # Ensure tags are case insensitive by converting to lowercase
+        if 'Tags' in meals_df.columns:
+            meals_df = meals_df.copy()
+            meals_df['Tags'] = meals_df['Tags'].str.lower()
+        
         # If no date specified, check the entire dataframe
         if date is None:
             meal_occurrences = defaultdict(list)
@@ -143,9 +148,16 @@ class NoRepeatInWindowRule(Rule):
         if meals_df.empty:
             return True, "No existing meals to check against"
         
+        # Convert tags to lowercase
+        meal_tags = [tag.lower() for tag in meal_tags] if meal_tags else []
+        
         # Ensure the Date column is in datetime format
         meals_df = meals_df.copy()
         meals_df['Date'] = pd.to_datetime(meals_df['Date'])
+        
+        # Make a copy to avoid modifying the original dataframe
+        if 'Tags' in meals_df.columns:
+            meals_df['Tags'] = meals_df['Tags'].str.lower()
         
         # Get the window bounds
         start_date = date - timedelta(days=self.window_days)
@@ -174,7 +186,8 @@ class WeeklyRequirementRule(Rule):
             type=RuleType.REQUIREMENT,
             scope=RuleScope.WEEK
         )
-        self.tag = tag
+        # Store tag in lowercase to ensure case-insensitive comparison
+        self.tag = tag.lower()
         self.occurrences = occurrences
     
     def validate(self, meals_df: pd.DataFrame, date: Optional[datetime] = None) -> Tuple[bool, str]:
@@ -199,8 +212,10 @@ class WeeklyRequirementRule(Rule):
                 # Count meals with the required tag
                 tag_count = 0
                 for _, row in week_meals.iterrows():
-                    if pd.notna(row['Tags']) and self.tag in row['Tags'].split(','):
-                        tag_count += 1
+                    if pd.notna(row['Tags']):
+                        meal_tags = [t.strip().lower() for t in row['Tags'].split(',')]
+                        if self.tag in meal_tags:
+                            tag_count += 1
                 
                 if tag_count < self.occurrences:
                     # Get Monday's date for this week
@@ -216,8 +231,10 @@ class WeeklyRequirementRule(Rule):
             # Count meals with the required tag
             tag_count = 0
             for _, row in week_meals.iterrows():
-                if pd.notna(row['Tags']) and self.tag in row['Tags'].split(','):
-                    tag_count += 1
+                if pd.notna(row['Tags']):
+                    meal_tags = [t.strip().lower() for t in row['Tags'].split(',')]
+                    if self.tag in meal_tags:
+                        tag_count += 1
             
             if tag_count < self.occurrences:
                 # Get Monday's date for this week
@@ -235,6 +252,8 @@ class WeeklyRequirementRule(Rule):
         """
         # This is a requirement, not a constraint, so meals can always be added
         # But we'll check if it helps meet the requirement
+        
+        meal_tags = [t.lower() for t in meal_tags] if meal_tags else []
         
         if not meal_tags:
             return True, f"Meal doesn't have the '{self.tag}' tag, so doesn't help meet the weekly requirement"
@@ -255,8 +274,10 @@ class WeeklyRequirementRule(Rule):
         # Count existing meals with the required tag
         tag_count = 0
         for _, row in week_meals.iterrows():
-            if pd.notna(row['Tags']) and self.tag in row['Tags'].split(','):
-                tag_count += 1
+            if pd.notna(row['Tags']):
+                week_meal_tags = [t.strip().lower() for t in row['Tags'].split(',')]
+                if self.tag in week_meal_tags:
+                    tag_count += 1
         
         if tag_count >= self.occurrences:
             return True, f"Weekly requirement for '{self.tag}' ({self.occurrences} meals) already met ({tag_count} meals)"
@@ -276,7 +297,8 @@ class SpecificDayRequirementRule(Rule):
             scope=RuleScope.DAY
         )
         self.day_of_week = day_of_week
-        self.tag = tag
+        # Store tag in lowercase to ensure case-insensitive comparison
+        self.tag = tag.lower()
     
     def validate(self, meals_df: pd.DataFrame, date: Optional[datetime] = None) -> Tuple[bool, str]:
         """Check if the specified day has a meal with the required tag."""
@@ -303,9 +325,11 @@ class SpecificDayRequirementRule(Rule):
             for (year, week), day_instance in day_meals.groupby(['Year', 'Week']):
                 has_tag = False
                 for _, row in day_instance.iterrows():
-                    if pd.notna(row['Tags']) and self.tag in row['Tags'].split(','):
-                        has_tag = True
-                        break
+                    if pd.notna(row['Tags']):
+                        meal_tags = [t.strip().lower() for t in row['Tags'].split(',')]
+                        if self.tag in meal_tags:
+                            has_tag = True
+                            break
                 
                 if not has_tag:
                     instance_date = day_instance.iloc[0]['Date'].strftime('%Y-%m-%d')
@@ -325,9 +349,11 @@ class SpecificDayRequirementRule(Rule):
             
             has_tag = False
             for _, row in day_meal.iterrows():
-                if pd.notna(row['Tags']) and self.tag in row['Tags'].split(','):
-                    has_tag = True
-                    break
+                if pd.notna(row['Tags']):
+                    meal_tags = [t.strip().lower() for t in row['Tags'].split(',')]
+                    if self.tag in meal_tags:
+                        has_tag = True
+                        break
             
             if not has_tag:
                 return False, f"{self._day_name()} on {date.strftime('%Y-%m-%d')} doesn't have a meal with tag '{self.tag}'"
@@ -346,7 +372,8 @@ class SpecificDayRequirementRule(Rule):
             return True, f"Date is not a {self._day_name()}, so rule for '{self.tag}' doesn't apply"
         
         # Check if the meal has the required tag
-        has_required_tag = self.tag in meal_tags if meal_tags else False
+        meal_tags = [t.lower() for t in meal_tags] if meal_tags else []
+        has_required_tag = self.tag in meal_tags
         
         if has_required_tag:
             return True, f"Meal has the '{self.tag}' tag, which is required for {self._day_name()}"

@@ -68,8 +68,8 @@ export default {
       
       return this.meals.filter(meal => {
         if (!meal.Tags) return false;
-        const mealTags = meal.Tags.split(',').map(t => t.trim());
-        return this.selectedTags.every(tag => mealTags.includes(tag));
+        const mealTags = meal.Tags.split(',').map(t => t.trim().toLowerCase());
+        return this.selectedTags.every(tag => mealTags.includes(tag.toLowerCase()));
       });
     }
   },

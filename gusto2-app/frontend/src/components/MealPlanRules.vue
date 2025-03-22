@@ -181,10 +181,16 @@ export default {
       }
     },
     
-    useThisSuggestion(meal, index) {
+    async useThisSuggestion(meal, index) {
+      // Convert tags to lowercase before checking validations
+      const mealData = {
+        Name: meal.name,
+        Tags: meal.tags ? meal.tags.split(',').map(t => t.trim().toLowerCase()).join(',') : ''
+      };
+      
       // Emit an event to let the parent component handle applying the suggestion
       this.$emit('use-suggestion', { 
-        meal: meal, 
+        meal: mealData, 
         index: index 
       });
     }
