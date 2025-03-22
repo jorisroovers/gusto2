@@ -270,34 +270,100 @@ export default {
   transition: all 0.2s ease;
 }
 
-/* Tag color system for filter tags */
-.filter-tag[data-tag*="vegetarian"], .filter-tag[data-tag*="vegan"] {
+/* Diet tags */
+.filter-tag[data-tag*="vegetarisch"], .filter-tag[data-tag*="vegan"] {
   background-color: #e8f5e9;
   color: #2e7d32;
 }
 
-.filter-tag[data-tag*="spicy"], .filter-tag[data-tag*="hot"] {
-  background-color: #fbe9e7;
-  color: #d84315;
-}
-
-.filter-tag[data-tag*="fish"], .filter-tag[data-tag*="seafood"] {
-  background-color: #e3f2fd;
-  color: #1565c0;
-}
-
-.filter-tag[data-tag*="meat"], .filter-tag[data-tag*="chicken"], .filter-tag[data-tag*="beef"], .filter-tag[data-tag*="pork"] {
-  background-color: #fce4ec;
-  color: #c2185b;
-}
-
-.filter-tag[data-tag*="quick"], .filter-tag[data-tag*="easy"] {
+.filter-tag[data-tag*="glutten-free"], .filter-tag[data-tag*="low fodmap"] {
   background-color: #f3e5f5;
   color: #7b1fa2;
 }
 
+/* Protein tags */
+.filter-tag[data-tag*="fish"], .filter-tag[data-tag*="zalm"], .filter-tag[data-tag*="tonijn"] {
+  background-color: #e3f2fd;
+  color: #1565c0;
+}
+
+.filter-tag[data-tag*="meat"], .filter-tag[data-tag*="chicken"], .filter-tag[data-tag*="beef"], .filter-tag[data-tag*="kip"], .filter-tag[data-tag*="gehakt"], .filter-tag[data-tag*="varken"], .filter-tag[data-tag*="wild"] {
+  background-color: #fce4ec;
+  color: #c2185b;
+}
+
+/* Cuisine tags */
+.filter-tag[data-tag*="asian"], .filter-tag[data-tag*="chinese"], .filter-tag[data-tag*="thai"], .filter-tag[data-tag*="indian"] {
+  background-color: #fff3e0;
+  color: #e65100;
+}
+
+.filter-tag[data-tag*="italian"], .filter-tag[data-tag*="italiaans"], .filter-tag[data-tag*="mediteraans"] {
+  background-color: #e8eaf6;
+  color: #303f9f;
+}
+
+.filter-tag[data-tag*="mexican"], .filter-tag[data-tag*="mexicaans"], .filter-tag[data-tag*="spanish"], .filter-tag[data-tag*="spaans"] {
+  background-color: #fff8e1;
+  color: #ff6f00;
+}
+
+/* Cooking method tags */
+.filter-tag[data-tag*="bbq"], .filter-tag[data-tag*="airfryer"] {
+  background-color: #ffebee;
+  color: #c62828;
+}
+
+.filter-tag[data-tag*="lang koken"], .filter-tag[data-tag*="ovenschotel"] {
+  background-color: #ede7f6;
+  color: #4527a0;
+}
+
+.filter-tag[data-tag*="takeout"], .filter-tag[data-tag*="restaurant"] {
+  background-color: #e0f2f1;
+  color: #00695c;
+}
+
+.filter-tag[data-tag*="easy"], .filter-tag[data-tag*="quick"] {
+  background-color: #e1f5fe;
+  color: #0277bd;
+}
+
+/* Carb/starch tags */
+.filter-tag[data-tag*="pasta"], .filter-tag[data-tag*="noodles"], .filter-tag[data-tag*="rijst"], .filter-tag[data-tag*="rice"] {
+  background-color: #f9fbe7;
+  color: #827717;
+}
+
+.filter-tag[data-tag*="aardappel"], .filter-tag[data-tag*="potato"], .filter-tag[data-tag*="puree"], .filter-tag[data-tag*="friet"] {
+  background-color: #fff3e0;
+  color: #bf360c;
+}
+
+.filter-tag[data-tag*="brood"] {
+  background-color: #efebe9;
+  color: #4e342e;
+}
+
+/* Vegetable tags */
+.filter-tag[data-tag*="brocolli"], .filter-tag[data-tag*="spinazie"], .filter-tag[data-tag*="bloemkool"], .filter-tag[data-tag*="courgette"], .filter-tag[data-tag*="pompoen"], .filter-tag[data-tag*="salade"] {
+  background-color: #f1f8e9;
+  color: #558b2f;
+}
+
+/* Other characteristics */
+.filter-tag[data-tag*="vettig"], .filter-tag[data-tag*="comfort"] {
+  background-color: #fafafa;
+  color: #424242;
+}
+
+/* Default style and active state */
 .filter-tag {
-  /* Default tag style if no specific category matches */
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
   background-color: #f5f5f5;
   color: #424242;
 }

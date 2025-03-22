@@ -152,34 +152,112 @@ export default {
   font-weight: 500;
 }
 
-/* Tag color system */
-.tag[data-tag*="vegetarian"], .tag[data-tag*="vegan"] {
+/* Tag colors for both tags and suggestions */
+/* Diet tags */
+.tag[data-tag*="vegetarisch"], .tag[data-tag*="vegan"],
+.suggestion[data-tag*="vegetarisch"], .suggestion[data-tag*="vegan"] {
   background-color: #e8f5e9;
   color: #2e7d32;
 }
 
-.tag[data-tag*="spicy"], .tag[data-tag*="hot"] {
-  background-color: #fbe9e7;
-  color: #d84315;
-}
-
-.tag[data-tag*="fish"], .tag[data-tag*="seafood"] {
-  background-color: #e3f2fd;
-  color: #1565c0;
-}
-
-.tag[data-tag*="meat"], .tag[data-tag*="chicken"], .tag[data-tag*="beef"], .tag[data-tag*="pork"] {
-  background-color: #fce4ec;
-  color: #c2185b;
-}
-
-.tag[data-tag*="quick"], .tag[data-tag*="easy"] {
+.tag[data-tag*="glutten-free"], .tag[data-tag*="low fodmap"],
+.suggestion[data-tag*="glutten-free"], .suggestion[data-tag*="low fodmap"] {
   background-color: #f3e5f5;
   color: #7b1fa2;
 }
 
-.tag {
-  /* Default tag style if no specific category matches */
+/* Protein tags */
+.tag[data-tag*="fish"], .tag[data-tag*="zalm"], .tag[data-tag*="tonijn"],
+.suggestion[data-tag*="fish"], .suggestion[data-tag*="zalm"], .suggestion[data-tag*="tonijn"] {
+  background-color: #e3f2fd;
+  color: #1565c0;
+}
+
+.tag[data-tag*="meat"], .tag[data-tag*="chicken"], .tag[data-tag*="beef"], .tag[data-tag*="kip"], .tag[data-tag*="gehakt"], .tag[data-tag*="varken"], .tag[data-tag*="wild"],
+.suggestion[data-tag*="meat"], .suggestion[data-tag*="chicken"], .suggestion[data-tag*="beef"], .suggestion[data-tag*="kip"], .suggestion[data-tag*="gehakt"], .suggestion[data-tag*="varken"], .suggestion[data-tag*="wild"] {
+  background-color: #fce4ec;
+  color: #c2185b;
+}
+
+/* Cuisine tags */
+.tag[data-tag*="asian"], .tag[data-tag*="chinese"], .tag[data-tag*="thai"], .tag[data-tag*="indian"],
+.suggestion[data-tag*="asian"], .suggestion[data-tag*="chinese"], .suggestion[data-tag*="thai"], .suggestion[data-tag*="indian"] {
+  background-color: #fff3e0;
+  color: #e65100;
+}
+
+.tag[data-tag*="italian"], .tag[data-tag*="italiaans"], .tag[data-tag*="mediteraans"],
+.suggestion[data-tag*="italian"], .suggestion[data-tag*="italiaans"], .suggestion[data-tag*="mediteraans"] {
+  background-color: #e8eaf6;
+  color: #303f9f;
+}
+
+.tag[data-tag*="mexican"], .tag[data-tag*="mexicaans"], .tag[data-tag*="spanish"], .tag[data-tag*="spaans"],
+.suggestion[data-tag*="mexican"], .suggestion[data-tag*="mexicaans"], .suggestion[data-tag*="spanish"], .suggestion[data-tag*="spaans"] {
+  background-color: #fff8e1;
+  color: #ff6f00;
+}
+
+/* Cooking method tags */
+.tag[data-tag*="bbq"], .tag[data-tag*="airfryer"],
+.suggestion[data-tag*="bbq"], .suggestion[data-tag*="airfryer"] {
+  background-color: #ffebee;
+  color: #c62828;
+}
+
+.tag[data-tag*="lang koken"], .tag[data-tag*="ovenschotel"],
+.suggestion[data-tag*="lang koken"], .suggestion[data-tag*="ovenschotel"] {
+  background-color: #ede7f6;
+  color: #4527a0;
+}
+
+.tag[data-tag*="takeout"], .tag[data-tag*="restaurant"],
+.suggestion[data-tag*="takeout"], .suggestion[data-tag*="restaurant"] {
+  background-color: #e0f2f1;
+  color: #00695c;
+}
+
+.tag[data-tag*="easy"], .tag[data-tag*="quick"],
+.suggestion[data-tag*="easy"], .suggestion[data-tag*="quick"] {
+  background-color: #e1f5fe;
+  color: #0277bd;
+}
+
+/* Carb/starch tags */
+.tag[data-tag*="pasta"], .tag[data-tag*="noodles"], .tag[data-tag*="rijst"], .tag[data-tag*="rice"],
+.suggestion[data-tag*="pasta"], .suggestion[data-tag*="noodles"], .suggestion[data-tag*="rijst"], .suggestion[data-tag*="rice"] {
+  background-color: #f9fbe7;
+  color: #827717;
+}
+
+.tag[data-tag*="aardappel"], .tag[data-tag*="potato"], .tag[data-tag*="puree"], .tag[data-tag*="friet"],
+.suggestion[data-tag*="aardappel"], .suggestion[data-tag*="potato"], .suggestion[data-tag*="puree"], .suggestion[data-tag*="friet"] {
+  background-color: #fff3e0;
+  color: #bf360c;
+}
+
+.tag[data-tag*="brood"],
+.suggestion[data-tag*="brood"] {
+  background-color: #efebe9;
+  color: #4e342e;
+}
+
+/* Vegetable tags */
+.tag[data-tag*="brocolli"], .tag[data-tag*="spinazie"], .tag[data-tag*="bloemkool"], .tag[data-tag*="courgette"], .tag[data-tag*="pompoen"], .tag[data-tag*="salade"],
+.suggestion[data-tag*="brocolli"], .suggestion[data-tag*="spinazie"], .suggestion[data-tag*="bloemkool"], .suggestion[data-tag*="courgette"], .suggestion[data-tag*="pompoen"], .suggestion[data-tag*="salade"] {
+  background-color: #f1f8e9;
+  color: #558b2f;
+}
+
+/* Other characteristics */
+.tag[data-tag*="vettig"], .tag[data-tag*="comfort"],
+.suggestion[data-tag*="vettig"], .suggestion[data-tag*="comfort"] {
+  background-color: #fafafa;
+  color: #424242;
+}
+
+/* Default styles */
+.tag, .suggestion {
   background-color: #f5f5f5;
   color: #424242;
 }
