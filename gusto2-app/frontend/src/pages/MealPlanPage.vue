@@ -56,6 +56,7 @@
                     <span v-for="tag in currentMeal.Tags.split(',')" 
                           :key="tag.trim()" 
                           class="tag"
+                          :data-tag="tag.trim().toLowerCase()"
                     >
                       {{ tag.trim() }}
                     </span>
@@ -1087,24 +1088,51 @@ export default {
 
 /* Add styles for the meal tags display */
 .meal-tags {
-  margin: 10px 0;
-  text-align: center;
-}
-
-.tags-container {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  justify-content: center;
+  gap: 0.5rem;
+  margin: 0.5rem 0;
 }
 
 .tag {
-  background-color: #f0f2f5;
-  color: #2c3e50;
-  padding: 4px 12px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.75rem;
   border-radius: 12px;
-  font-size: 0.875rem;
+  font-size: 0.75rem;
   font-weight: 500;
+}
+
+/* Tag color system */
+.tag[data-tag*="vegetarian"], .tag[data-tag*="vegan"] {
+  background-color: #e8f5e9;
+  color: #2e7d32;
+}
+
+.tag[data-tag*="spicy"], .tag[data-tag*="hot"] {
+  background-color: #fbe9e7;
+  color: #d84315;
+}
+
+.tag[data-tag*="fish"], .tag[data-tag*="seafood"] {
+  background-color: #e3f2fd;
+  color: #1565c0;
+}
+
+.tag[data-tag*="meat"], .tag[data-tag*="chicken"], .tag[data-tag*="beef"], .tag[data-tag*="pork"] {
+  background-color: #fce4ec;
+  color: #c2185b;
+}
+
+.tag[data-tag*="quick"], .tag[data-tag*="easy"] {
+  background-color: #f3e5f5;
+  color: #7b1fa2;
+}
+
+.tag {
+  /* Default tag style if no specific category matches */
+  background-color: #f5f5f5;
+  color: #424242;
 }
 
 /* Desktop layout */

@@ -20,6 +20,7 @@
                   <span v-for="tag in meal.Tags.split(',')" 
                         :key="tag.trim()" 
                         class="tag"
+                        :data-tag="tag.trim().toLowerCase()"
                   >
                     {{ tag.trim() }}
                   </span>
@@ -35,6 +36,7 @@
               v-for="tag in availableTags" 
               :key="tag"
               :class="['filter-tag', { active: selectedTags.includes(tag) }]"
+              :data-tag="tag.toLowerCase()"
               @click="toggleTag(tag)"
             >
               {{ tag }}
@@ -192,12 +194,44 @@ export default {
 }
 
 .tag {
-  background-color: #f0f2f5;
-  color: #2c3e50;
+  display: inline-flex;
+  align-items: center;
   padding: 0.25rem 0.75rem;
   border-radius: 12px;
   font-size: 0.75rem;
   font-weight: 500;
+}
+
+/* Tag color system for filtered meal tags */
+.tag[data-tag*="vegetarian"], .tag[data-tag*="vegan"] {
+  background-color: #e8f5e9;
+  color: #2e7d32;
+}
+
+.tag[data-tag*="spicy"], .tag[data-tag*="hot"] {
+  background-color: #fbe9e7;
+  color: #d84315;
+}
+
+.tag[data-tag*="fish"], .tag[data-tag*="seafood"] {
+  background-color: #e3f2fd;
+  color: #1565c0;
+}
+
+.tag[data-tag*="meat"], .tag[data-tag*="chicken"], .tag[data-tag*="beef"], .tag[data-tag*="pork"] {
+  background-color: #fce4ec;
+  color: #c2185b;
+}
+
+.tag[data-tag*="quick"], .tag[data-tag*="easy"] {
+  background-color: #f3e5f5;
+  color: #7b1fa2;
+}
+
+.tag {
+  /* Default tag style if no specific category matches */
+  background-color: #f5f5f5;
+  color: #424242;
 }
 
 .tags-sidebar {
@@ -229,8 +263,6 @@ export default {
 }
 
 .filter-tag {
-  background-color: #f0f2f5;
-  color: #2c3e50;
   padding: 0.5rem 1rem;
   border-radius: 4px;
   font-size: 0.875rem;
@@ -238,13 +270,45 @@ export default {
   transition: all 0.2s ease;
 }
 
+/* Tag color system for filter tags */
+.filter-tag[data-tag*="vegetarian"], .filter-tag[data-tag*="vegan"] {
+  background-color: #e8f5e9;
+  color: #2e7d32;
+}
+
+.filter-tag[data-tag*="spicy"], .filter-tag[data-tag*="hot"] {
+  background-color: #fbe9e7;
+  color: #d84315;
+}
+
+.filter-tag[data-tag*="fish"], .filter-tag[data-tag*="seafood"] {
+  background-color: #e3f2fd;
+  color: #1565c0;
+}
+
+.filter-tag[data-tag*="meat"], .filter-tag[data-tag*="chicken"], .filter-tag[data-tag*="beef"], .filter-tag[data-tag*="pork"] {
+  background-color: #fce4ec;
+  color: #c2185b;
+}
+
+.filter-tag[data-tag*="quick"], .filter-tag[data-tag*="easy"] {
+  background-color: #f3e5f5;
+  color: #7b1fa2;
+}
+
+.filter-tag {
+  /* Default tag style if no specific category matches */
+  background-color: #f5f5f5;
+  color: #424242;
+}
+
 .filter-tag:hover {
-  background-color: #e4e7eb;
+  filter: brightness(0.95);
 }
 
 .filter-tag.active {
-  background-color: #3498db;
-  color: white;
+  filter: brightness(0.9);
+  font-weight: 500;
 }
 
 @media (max-width: 768px) {

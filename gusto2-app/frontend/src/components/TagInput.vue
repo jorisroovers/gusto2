@@ -1,7 +1,7 @@
 <template>
   <div class="tag-input">
     <div class="tags-container">
-      <span v-for="tag in tags" :key="tag" class="tag">
+      <span v-for="tag in tags" :key="tag" class="tag" :data-tag="tag">
         {{ tag }}
         <button class="remove-tag" @click="removeTag(tag)">&times;</button>
       </span>
@@ -24,6 +24,7 @@
         :key="suggestion"
         class="suggestion"
         :class="{ active: index === activeSuggestionIndex }"
+        :data-tag="suggestion.toLowerCase()"
         @mousedown="addTag(suggestion)"
         @mouseover="activeSuggestionIndex = index"
       >
@@ -145,12 +146,42 @@ export default {
 .tag {
   display: flex;
   align-items: center;
-  background-color: #f0f2f5;
-  color: #2c3e50;
   padding: 2px 8px;
   border-radius: 12px;
   font-size: 0.875rem;
   font-weight: 500;
+}
+
+/* Tag color system */
+.tag[data-tag*="vegetarian"], .tag[data-tag*="vegan"] {
+  background-color: #e8f5e9;
+  color: #2e7d32;
+}
+
+.tag[data-tag*="spicy"], .tag[data-tag*="hot"] {
+  background-color: #fbe9e7;
+  color: #d84315;
+}
+
+.tag[data-tag*="fish"], .tag[data-tag*="seafood"] {
+  background-color: #e3f2fd;
+  color: #1565c0;
+}
+
+.tag[data-tag*="meat"], .tag[data-tag*="chicken"], .tag[data-tag*="beef"], .tag[data-tag*="pork"] {
+  background-color: #fce4ec;
+  color: #c2185b;
+}
+
+.tag[data-tag*="quick"], .tag[data-tag*="easy"] {
+  background-color: #f3e5f5;
+  color: #7b1fa2;
+}
+
+.tag {
+  /* Default tag style if no specific category matches */
+  background-color: #f5f5f5;
+  color: #424242;
 }
 
 .remove-tag {
@@ -193,10 +224,45 @@ input {
 .suggestion {
   padding: 8px 12px;
   cursor: pointer;
+  display: block;
+  width: 100%;
+  text-align: left;
+}
+
+/* Tag color system for suggestions */
+.suggestion[data-tag*="vegetarian"], .suggestion[data-tag*="vegan"] {
+  background-color: #e8f5e9;
+  color: #2e7d32;
+}
+
+.suggestion[data-tag*="spicy"], .suggestion[data-tag*="hot"] {
+  background-color: #fbe9e7;
+  color: #d84315;
+}
+
+.suggestion[data-tag*="fish"], .suggestion[data-tag*="seafood"] {
+  background-color: #e3f2fd;
+  color: #1565c0;
+}
+
+.suggestion[data-tag*="meat"], .suggestion[data-tag*="chicken"], .suggestion[data-tag*="beef"], .suggestion[data-tag*="pork"] {
+  background-color: #fce4ec;
+  color: #c2185b;
+}
+
+.suggestion[data-tag*="quick"], .suggestion[data-tag*="easy"] {
+  background-color: #f3e5f5;
+  color: #7b1fa2;
+}
+
+.suggestion {
+  /* Default suggestion style if no specific category matches */
+  background-color: #f5f5f5;
+  color: #424242;
 }
 
 .suggestion:hover,
 .suggestion.active {
-  background-color: #f5f5f5;
+  filter: brightness(0.95);
 }
 </style>

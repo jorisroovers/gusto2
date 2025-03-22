@@ -1,6 +1,6 @@
-Give the different tags appropriate colors. Use same colors on recipes and Meal plan pages.
+Make App name clickable, the mealplan should be the homepage.
 
-On the recipes page, when clicking a recipe, it should show the list of meals that recipes is used by below. Re-use the list view from the tag filtering.
+Give the different tags appropriate colors. Use same colors on recipes and Meal plan pages.
 
 Recipes should be auto-populated when loading meals, so that we don't have to explicitly click the populate from meal plan button.
 
