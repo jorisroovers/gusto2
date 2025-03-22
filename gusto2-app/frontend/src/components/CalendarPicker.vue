@@ -1,38 +1,114 @@
 <!-- CalendarPicker.vue -->
 <template>
-  <div class="calendar-picker">
-    <div class="calendar-header">
-      <button @click="previousMonth" class="nav-button">
-        <span class="icon">&#x2190;</span>
-      </button>
-      <span class="month-display">{{ currentMonthDisplay }}</span>
-      <button @click="nextMonth" class="nav-button">
-        <span class="icon">&#x2192;</span>
-      </button>
+  <div>
+    <div class="calendar-picker">
+      <div class="calendar-header">
+        <button @click="previousMonth" class="nav-button">
+          <span class="icon">&#x2190;</span>
+        </button>
+        <span class="month-display">{{ currentMonthDisplay }}</span>
+        <button @click="nextMonth" class="nav-button">
+          <span class="icon">&#x2192;</span>
+        </button>
+      </div>
+      <div class="calendar-grid">
+        <!-- Weekday headers including validation column -->
+        <div class="weekday-header" v-for="day in [...weekDays, 'Valid']" :key="day">{{ day }}</div>
+        
+        <!-- Calendar rows -->
+        <template v-for="week in calendarWeeks" :key="week.weekStart">
+          <!-- Days of the week -->
+          <template v-for="(date, index) in week.days" :key="index">
+            <div 
+              class="calendar-day"
+              :class="{
+                'weekend': date.isWeekend,
+                'empty': !date.day,
+                'no-meal': date.day && !date.hasMeal,
+                'current-day': isCurrentDay(date),
+                'changed': date.isChanged,
+                'other-month': date.isOtherMonth
+              }"
+              @click="date.day && selectDate(date)"
+            >
+              <span class="day-number">{{ date.day }}</span>
+              <span v-if="date.isChanged" class="changed-indicator" title="This meal has unsaved changes">*</span>
+            </div>
+          </template>
+          <!-- Validation column -->
+          <div 
+            class="validation-cell"
+            :class="{
+              'validation-loading': week.validationLoading,
+              'validation-success': !week.validationLoading && week.validationResults && week.validationResults.all_constraints_met && week.validationResults.all_requirements_met,
+              'validation-error': !week.validationLoading && week.validationResults && (!week.validationResults.all_constraints_met || !week.validationResults.all_requirements_met)
+            }"
+            @click="week.validationResults && showValidationDialog(week)"
+          >
+            <template v-if="week.validationLoading">
+              <span class="loading-spinner"></span>
+            </template>
+            <template v-else-if="week.validationResults">
+              <template v-if="week.validationResults.all_constraints_met && week.validationResults.all_requirements_met">
+                ✓
+              </template>
+              <template v-else>
+                {{ countFailedValidations(week.validationResults) }}
+              </template>
+            </template>
+          </div>
+        </template>
+      </div>
     </div>
-    <div class="calendar-grid">
-      <div class="weekday-header" v-for="day in weekDays" :key="day">{{ day }}</div>
-      <div 
-        v-for="(date, index) in calendarDays" 
-        :key="index"
-        class="calendar-day"
-        :class="{
-          'weekend': date.isWeekend,
-          'empty': !date.day,
-          'no-meal': date.day && !date.hasMeal,
-          'current-day': isCurrentDay(date),
-          'changed': date.isChanged
-        }"
-        @click="date.day && selectDate(date)"
-      >
-        <span class="day-number">{{ date.day }}</span>
-        <span v-if="date.isChanged" class="changed-indicator" title="This meal has unsaved changes">*</span>
+
+    <!-- Validation Dialog -->
+    <div v-if="showingValidationResults" class="validation-dialog">
+      <div class="validation-dialog-content">
+        <h3>Week Validations</h3>
+        <div v-if="selectedWeekValidations" class="validation-results">
+          <!-- Constraints -->
+          <div class="result-section">
+            <h4>Constraints 
+              <span :class="selectedWeekValidations.all_constraints_met ? 'status-success' : 'status-error'">
+                ({{ selectedWeekValidations.all_constraints_met ? 'All Met' : 'Issues Found' }})
+              </span>
+            </h4>
+            <ul class="rules-list">
+              <li v-for="(constraint, index) in selectedWeekValidations.constraints" 
+                  :key="'c-'+index"
+                  :class="{'rule-valid': constraint.is_valid, 'rule-invalid': !constraint.is_valid}">
+                <div class="rule-name">{{ constraint.rule_name }}</div>
+                <div class="rule-message">{{ constraint.message }}</div>
+              </li>
+            </ul>
+          </div>
+
+          <!-- Requirements -->
+          <div class="result-section">
+            <h4>Requirements 
+              <span :class="selectedWeekValidations.all_requirements_met ? 'status-success' : 'status-warning'">
+                ({{ selectedWeekValidations.all_requirements_met ? 'All Met' : 'Some Not Met' }})
+              </span>
+            </h4>
+            <ul class="rules-list">
+              <li v-for="(requirement, index) in selectedWeekValidations.requirements" 
+                  :key="'r-'+index"
+                  :class="{'rule-valid': requirement.is_valid, 'rule-invalid': !requirement.is_valid}">
+                <div class="rule-name">{{ requirement.rule_name }}</div>
+                <div class="rule-message">{{ requirement.message }}</div>
+              </li>
+            </ul>
+          </div>
+        </div>
+        <button @click="closeValidationDialog" class="close-button">Close</button>
       </div>
     </div>
   </div>
 </template>
 
 <script>
+import axios from 'axios';
+
 export default {
   name: 'CalendarPicker',
   props: {
@@ -53,7 +129,9 @@ export default {
   data() {
     return {
       weekDays: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
-      currentMonth: new Date()
+      currentMonth: new Date(),
+      showingValidationResults: false,
+      selectedWeekValidations: null
     };
   },
   watch: {
@@ -82,19 +160,26 @@ export default {
     currentMonthDisplay() {
       return this.currentMonth.toLocaleString('default', { month: 'long', year: 'numeric' });
     },
-    calendarDays() {
+    calendarWeeks() {
       const days = [];
       const year = this.currentMonth.getFullYear();
       const month = this.currentMonth.getMonth();
       
-      // Get first day of month and adjust for Monday start (0 = Monday, 6 = Sunday)
+      // Get first day of month and adjust for Monday start
       const firstDay = new Date(year, month, 1);
       let startDay = firstDay.getDay() - 1;
-      if (startDay === -1) startDay = 6; // Handle Sunday
+      if (startDay === -1) startDay = 6;
       
       // Add empty days for padding at start
       for (let i = 0; i < startDay; i++) {
-        days.push({ day: '', isWeekend: false });
+        const prevMonthDay = new Date(year, month, -i);
+        days.push({
+          day: prevMonthDay.getDate(),
+          isWeekend: prevMonthDay.getDay() === 0 || prevMonthDay.getDay() === 6,
+          date: this.formatDateToString(prevMonthDay),
+          isOtherMonth: true,
+          hasMeal: this.checkHasMeal(prevMonthDay)
+        });
       }
       
       // Get number of days in month
@@ -102,94 +187,151 @@ export default {
       
       // Add all days of the month
       for (let i = 1; i <= lastDay; i++) {
-        // Create date at noon to avoid timezone issues
         const date = new Date(year, month, i, 12, 0, 0);
-        const dayOfWeek = date.getDay();
-        
-        // Store the simple date string in YYYY-MM-DD format for consistency
         const dateString = this.formatDateToString(date);
         
-        // Find matching meal
         const mealIndex = this.meals.findIndex(meal => {
           if (!meal.Date) return false;
           return this.formatDateToString(new Date(meal.Date)) === dateString;
         });
 
-        // Check if this meal has changes
-        const isChanged = mealIndex !== -1 && this.changedIndices.includes(mealIndex);
-        
         days.push({
           day: i,
-          isWeekend: dayOfWeek === 0 || dayOfWeek === 6,
+          isWeekend: date.getDay() === 0 || date.getDay() === 6,
           date: dateString,
-          hasMeal: this.meals.some(meal => {
-            if (!meal.Date) return false;
-            // Compare using our normalized date strings
-            return this.formatDateToString(new Date(meal.Date)) === dateString && 
-                   meal.Name && meal.Name.trim() !== '';
-          }),
-          isChanged
+          hasMeal: this.checkHasMeal(date),
+          isChanged: mealIndex !== -1 && this.changedIndices.includes(mealIndex),
+          isOtherMonth: false
         });
       }
-      
-      return days;
+
+      // Add days from next month to complete the last week
+      const lastDayOfMonth = new Date(year, month, lastDay);
+      const lastDayWeekday = lastDayOfMonth.getDay();
+      if (lastDayWeekday !== 0) { // If not Sunday, add remaining days
+        for (let i = 1; i <= 7 - lastDayWeekday; i++) {
+          const nextMonthDay = new Date(year, month + 1, i);
+          days.push({
+            day: i,
+            isWeekend: nextMonthDay.getDay() === 0 || nextMonthDay.getDay() === 6,
+            date: this.formatDateToString(nextMonthDay),
+            isOtherMonth: true,
+            hasMeal: this.checkHasMeal(nextMonthDay)
+          });
+        }
+      }
+
+      // Group days into weeks
+      const weeks = [];
+      for (let i = 0; i < days.length; i += 7) {
+        const weekDays = days.slice(i, i + 7);
+        const weekStart = weekDays[0].date;
+        const week = {
+          weekStart,
+          days: weekDays,
+          validationResults: null,
+          validationLoading: false,
+          validationError: false
+        };
+        weeks.push(week);
+        // Start validation for this week
+        this.validateWeek(week);
+      }
+
+      return weeks;
     }
   },
   methods: {
-    // Helper method to format a date to YYYY-MM-DD consistently
     formatDateToString(date) {
-      // Ensure we have a valid date
       if (!(date instanceof Date) || isNaN(date.getTime())) {
         return '';
       }
-      
       const year = date.getFullYear();
-      // Month is 0-based, so add 1 and pad with leading zero if needed
       const month = String(date.getMonth() + 1).padStart(2, '0');
-      // Pad day with leading zero if needed
       const day = String(date.getDate()).padStart(2, '0');
-      
       return `${year}-${month}-${day}`;
     },
-    
     previousMonth() {
       this.currentMonth = new Date(this.currentMonth.getFullYear(), this.currentMonth.getMonth() - 1);
     },
-    
     nextMonth() {
       this.currentMonth = new Date(this.currentMonth.getFullYear(), this.currentMonth.getMonth() + 1);
     },
-    
     selectDate(date) {
       if (date.date) {
-        // Find the corresponding meal with this date to get its exact date format
         const matchingMeal = this.meals.find(meal => {
           if (!meal.Date) return false;
-          
-          // Use our date comparison logic to find the meal with matching date
           const mealDate = new Date(meal.Date);
           const formattedMealDate = this.formatDateToString(mealDate);
           return formattedMealDate === date.date;
         });
-        
-        // If found, emit the original date format, otherwise use our formatted date
         if (matchingMeal && matchingMeal.Date) {
           this.$emit('date-selected', matchingMeal.Date);
         } else {
-          // As a fallback, emit the calendar date format
           this.$emit('date-selected', date.date);
         }
       }
     },
-    
     isCurrentDay(date) {
       if (!date.date || !this.selectedDate) return false;
-      
-      // Convert selectedDate to our consistent format for comparison
       const normalizedSelectedDate = this.formatDateToString(new Date(this.selectedDate));
-      
-      // Direct string comparison of normalized dates
       return date.date === normalizedSelectedDate;
+    },
+    showValidationsForWeek(week) {
+      // Emit event to show validation details for the week
+      this.$emit('show-week-validations', week.weekStart);
+    },
+    async validateWeek(week) {
+      if (!week.weekStart) return;
+
+      // Set loading state
+      week.validationLoading = true;
+
+      try {
+        const response = await axios.post('/api/rules/validate', {
+          date: this.formatDateToAPIFormat(week.weekStart)
+        });
+        
+        if (response.data && response.data.status === 'success') {
+          week.validationResults = response.data;
+        }
+      } catch (error) {
+        console.error('Error validating week:', error);
+        week.validationError = true;
+      } finally {
+        week.validationLoading = false;
+      }
+    },
+
+    showValidationDialog(week) {
+      this.selectedWeekValidations = week.validationResults;
+      this.showingValidationResults = true;
+    },
+
+    closeValidationDialog() {
+      this.showingValidationResults = false;
+      this.selectedWeekValidations = null;
+    },
+
+    countFailedValidations(results) {
+      if (!results) return 0;
+      const failedConstraints = results.constraints.filter(c => !c.is_valid).length;
+      const failedRequirements = results.requirements.filter(r => !r.is_valid).length;
+      return failedConstraints + failedRequirements;
+    },
+
+    formatDateToAPIFormat(dateString) {
+      const date = new Date(dateString);
+      return `${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')}`;
+    },
+
+    checkHasMeal(date) {
+      const dateString = this.formatDateToString(date);
+      return this.meals.some(meal => {
+        if (!meal.Date) return false;
+        return this.formatDateToString(new Date(meal.Date)) === dateString && 
+               meal.Name && meal.Name.trim() !== '';
+      });
     }
   }
 };
@@ -221,9 +363,9 @@ export default {
 
 .calendar-grid {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
+  grid-template-columns: repeat(8, 1fr);
   gap: 4px;
-  aspect-ratio: 7/6;
+  aspect-ratio: 8/6;
 }
 
 .weekday-header {
@@ -315,5 +457,138 @@ export default {
     max-width: 400px;
     margin: 0 auto;
   }
+}
+
+.validation-cell {
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #eee;
+  border-radius: 4px;
+  font-size: 0.875rem;
+  transition: all 0.2s ease;
+  position: relative;
+  cursor: pointer;
+}
+
+.validation-success {
+  background-color: #e8f5e9;
+  color: #2e7d32;
+  border-color: #a5d6a7;
+}
+
+.validation-error {
+  background-color: #ffebee;
+  color: #c62828;
+  border-color: #ef9a9a;
+}
+
+.validation-cell:hover {
+  transform: scale(1.05);
+  z-index: 1;
+}
+
+.other-month {
+  opacity: 0.5;
+}
+
+.validation-dialog {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.validation-dialog-content {
+  background: white;
+  padding: 2rem;
+  border-radius: 8px;
+  max-width: 600px;
+  width: 90%;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.close-button {
+  margin-top: 1rem;
+  padding: 0.5rem 1rem;
+  background: #e0e0e0;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.close-button:hover {
+  background: #d0d0d0;
+}
+
+.validation-loading {
+  background-color: #f5f5f5;
+}
+
+.loading-spinner {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 2px solid #f3f3f3;
+  border-top: 2px solid #3498db;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.status-success {
+  color: #2ecc71;
+}
+
+.status-warning {
+  color: #f39c12;
+}
+
+.status-error {
+  color: #e74c3c;
+}
+
+.rules-list {
+  list-style-type: none;
+  padding: 0;
+  margin: 0;
+}
+
+.rules-list li {
+  padding: 10px;
+  border-radius: 4px;
+  margin-bottom: 8px;
+}
+
+.rule-valid {
+  background-color: rgba(46, 204, 113, 0.1);
+  border-left: 3px solid #2ecc71;
+}
+
+.rule-invalid {
+  background-color: rgba(231, 76, 60, 0.1);
+  border-left: 3px solid #e74c3c;
+}
+
+.rule-name {
+  font-weight: 500;
+  margin-bottom: 5px;
+}
+
+.rule-message {
+  font-size: 0.9em;
+  color: #666;
 }
 </style>

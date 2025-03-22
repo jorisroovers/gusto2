@@ -1,27 +1,12 @@
-Recipes and Meal Plan should be different pages in the app which have different URIs.
+In the calendar, add an extra column after sunday that is used to indicate the validation of that past week. It should show a green square with a check if all validations passed for that week and a red square with the number of failing validations in it otherwise. When the box is clicked, the validations for that week should be displayed.
 
-Extract the css styles to a separate file.
+Display tags of the selected meal.
 
-On desktop, move to a full page width design, with app name and page links in a top navigation bar.
+In the calendar, still display days of other previous or next months if they are part of the week that has days in the current month. Shade those days a bit grayer so it's clear those days are not part of the current month.
 
-On desktop, In the mealplan page, move the calendar view to the right of the day view.
+In the meal edit screen, the tag field should auto-complete tags and show tags as labels that can be removed again inside the input field.
 
-Brainstorm how we can implement a system for "mealplan rules":
-- Constraints: cannot be violated
-  Examples:
-    - Don’t plan the same meal twice in a 3 week sliding window
-- Requirements: must be met
-  Examples:
-    - On a weekly basis
-        - Have fish at least once a week
-        - Have rice at least once a week
-        - Have pasta once a week
-        - Friday = indulging = comfort food
-
-The idea should then be that we:
-1.  can validate that these conditions are met for any given week (but this should be able to be ignored, it's just validation not enforced)
-2.  When new meals are suggested, it should not violate any of the constraints while also trying to meet the requirements for the week.
-
+On the recipe page, show all tags on the right hand side and allow filtering of the recipes based on one or more selected tags.
 
 On the recipe page, add a "Suggest" button which should call a backend API endpoint which can for now just return some hardcoded recipe suggestion. On the front-end, there should be the ability to accept or reject the suggestion. 
 
