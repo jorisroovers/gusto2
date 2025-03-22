@@ -50,6 +50,17 @@
                   <h3>No meal planned</h3>
                   <span v-if="isCurrentMealChanged" class="changed-indicator" title="This meal has unsaved changes">*</span>
                 </div>
+                <!-- Add tags display -->
+                <div v-if="currentMeal.Tags" class="meal-tags">
+                  <div class="tags-container">
+                    <span v-for="tag in currentMeal.Tags.split(',')" 
+                          :key="tag.trim()" 
+                          class="tag"
+                    >
+                      {{ tag.trim() }}
+                    </span>
+                  </div>
+                </div>
                 <div class="meal-description">
                   <p v-if="currentMeal.Notes">{{ currentMeal.Notes }}</p>
                   <p v-else>&nbsp;</p>
@@ -1026,6 +1037,28 @@ export default {
 
 .notification.warning {
   background-color: #f39c12;
+}
+
+/* Add styles for the meal tags display */
+.meal-tags {
+  margin: 10px 0;
+  text-align: center;
+}
+
+.tags-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: center;
+}
+
+.tag {
+  background-color: #f0f2f5;
+  color: #2c3e50;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 0.875rem;
+  font-weight: 500;
 }
 
 /* Desktop layout */
