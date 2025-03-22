@@ -18,7 +18,11 @@
     <div v-else-if="error" class="error">{{ error }}</div>
     <div v-else-if="recipes.length === 0" class="no-recipes">No recipes found</div>
     <div v-else class="recipes-grid">
-      <div v-for="recipe in filteredRecipes" :key="recipe.Name" class="recipe-card">
+      <div v-for="recipe in filteredRecipes" 
+           :key="recipe.Name" 
+           :class="['recipe-card', { active: selectedRecipe && selectedRecipe.Name === recipe.Name }]"
+           @click="selectRecipe(recipe)"
+      >
         <h3>{{ recipe.Name }}</h3>
         <div class="tags" v-if="recipe.Tags">
           <span v-for="tag in recipe.Tags.split(',')" 
@@ -27,6 +31,20 @@
           >
             {{ tag.trim() }}
           </span>
+        </div>
+        <!-- Show associated meals when recipe is selected -->
+        <div v-if="selectedRecipe && selectedRecipe.Name === recipe.Name && associatedMeals.length > 0" class="associated-meals">
+          <h4>Used in meals:</h4>
+          <div class="meals-list">
+            <div v-for="meal in associatedMeals" 
+                 :key="meal.Date + meal.Name" 
+                 class="meal-item"
+                 @click="goToMeal(meal)"
+            >
+              <div class="meal-date">{{ formatDate(meal.Date) }}</div>
+              <div class="meal-name">{{ meal.Name }}</div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -51,7 +69,9 @@ export default {
       loading: true,
       error: null,
       notification: '',
-      notificationType: 'info'
+      notificationType: 'info',
+      selectedRecipe: null,
+      associatedMeals: []
     };
   },
   computed: {
@@ -113,6 +133,38 @@ export default {
       setTimeout(() => {
         this.notification = '';
       }, 3000);
+    },
+    async selectRecipe(recipe) {
+      if (this.selectedRecipe && this.selectedRecipe.Name === recipe.Name) {
+        this.selectedRecipe = null;
+        this.associatedMeals = [];
+        return;
+      }
+      
+      this.selectedRecipe = recipe;
+      try {
+        const response = await axios.get('/api/meals');
+        if (response.data && response.data.meals) {
+          this.associatedMeals = response.data.meals.filter(meal => 
+            meal.Name && meal.Name.trim() === recipe.Name.trim()
+          );
+        }
+      } catch (error) {
+        console.error('Error fetching associated meals:', error);
+        this.showNotification('Failed to fetch associated meals', 'error');
+      }
+    },
+    formatDate(dateString) {
+      if (!dateString) return '';
+      const date = new Date(dateString);
+      return date.toLocaleDateString();
+    },
+    goToMeal(meal) {
+      // Navigate to meal plan page with the date as a query parameter
+      this.$router.push({
+        name: 'MealPlan',
+        query: { date: meal.Date }
+      });
     }
   },
   mounted() {
@@ -165,11 +217,16 @@ export default {
   padding: 1.25rem;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   transition: transform 0.2s ease, box-shadow 0.2s ease;
+  cursor: pointer;
 }
 
 .recipe-card:hover {
   transform: translateY(-2px);
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.recipe-card.active {
+  border: 2px solid #3498db;
 }
 
 .recipe-card h3 {
@@ -235,6 +292,47 @@ export default {
   background-color: #d1ecf1;
   color: #0c5460;
   border: 1px solid #bee5eb;
+}
+
+.associated-meals {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid #eee;
+}
+
+.associated-meals h4 {
+  margin: 0 0 0.75rem 0;
+  color: #2c3e50;
+  font-size: 0.95rem;
+}
+
+.meals-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.meal-item {
+  padding: 0.75rem;
+  background-color: #f8f9fa;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.meal-item:hover {
+  background-color: #e9ecef;
+}
+
+.meal-date {
+  color: #666;
+  font-size: 0.8rem;
+}
+
+.meal-name {
+  font-weight: 500;
+  color: #2c3e50;
+  font-size: 0.9rem;
 }
 
 @media (max-width: 768px) {
