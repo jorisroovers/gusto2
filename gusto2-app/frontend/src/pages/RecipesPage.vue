@@ -2,7 +2,32 @@
   <div class="recipes-page">
     <div class="content-wrapper">
       <div class="recipes-layout">
-        <recipe-list ref="recipeList" :selectedTags="selectedTags" />
+        <div class="main-content">
+          <recipe-list ref="recipeList" :selectedTags="selectedTags" />
+          <!-- Add filtered meals section -->
+          <div v-if="selectedTags.length > 0 && filteredMeals.length > 0" class="filtered-meals">
+            <h3>Meals with selected tags</h3>
+            <div class="meals-list">
+              <div 
+                v-for="meal in filteredMeals" 
+                :key="meal.Date + meal.Name" 
+                class="meal-item"
+                @click="goToMeal(meal)"
+              >
+                <div class="meal-date">{{ formatDate(meal.Date) }}</div>
+                <div class="meal-name">{{ meal.Name }}</div>
+                <div class="meal-tags">
+                  <span v-for="tag in meal.Tags.split(',')" 
+                        :key="tag.trim()" 
+                        class="tag"
+                  >
+                    {{ tag.trim() }}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
         <div class="tags-sidebar">
           <h3>Filter by Tags</h3>
           <div class="tags-list">
@@ -22,6 +47,7 @@
 </template>
 
 <script>
+import axios from 'axios';
 import RecipeList from '../components/RecipeList.vue';
 
 export default {
@@ -32,8 +58,20 @@ export default {
   data() {
     return {
       selectedTags: [],
-      availableTags: []
+      availableTags: [],
+      meals: []
     };
+  },
+  computed: {
+    filteredMeals() {
+      if (!this.selectedTags.length) return [];
+      
+      return this.meals.filter(meal => {
+        if (!meal.Tags) return false;
+        const mealTags = meal.Tags.split(',').map(t => t.trim());
+        return this.selectedTags.every(tag => mealTags.includes(tag));
+      });
+    }
   },
   methods: {
     toggleTag(tag) {
@@ -46,7 +84,32 @@ export default {
     },
     updateAvailableTags(tags) {
       this.availableTags = tags;
+    },
+    formatDate(dateString) {
+      if (!dateString) return '';
+      const date = new Date(dateString);
+      return date.toLocaleDateString();
+    },
+    async fetchMeals() {
+      try {
+        const response = await axios.get('/api/meals');
+        if (response.data && response.data.meals) {
+          this.meals = response.data.meals;
+        }
+      } catch (error) {
+        console.error('Error fetching meals:', error);
+      }
+    },
+    goToMeal(meal) {
+      // Navigate to meal plan page with the date as a query parameter
+      this.$router.push({
+        name: 'MealPlan',
+        query: { date: meal.Date }
+      });
     }
+  },
+  async mounted() {
+    await this.fetchMeals();
   }
 };
 </script>
@@ -70,6 +133,71 @@ export default {
   gap: 2rem;
   align-items: start;
   height: 100%;
+}
+
+.main-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.filtered-meals {
+  background: white;
+  padding: 1.5rem;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.filtered-meals h3 {
+  margin: 0 0 1rem 0;
+  color: #2c3e50;
+}
+
+.meals-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.meal-item {
+  padding: 1rem;
+  background-color: #f8f9fa;
+  border-radius: 6px;
+  display: grid;
+  gap: 0.5rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.meal-item:hover {
+  background-color: #e9ecef;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.meal-date {
+  color: #666;
+  font-size: 0.875rem;
+}
+
+.meal-name {
+  font-weight: 500;
+  color: #2c3e50;
+}
+
+.meal-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.tag {
+  background-color: #f0f2f5;
+  color: #2c3e50;
+  padding: 0.25rem 0.75rem;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 500;
 }
 
 .tags-sidebar {

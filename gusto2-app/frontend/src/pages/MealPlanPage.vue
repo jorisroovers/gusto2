@@ -659,6 +659,20 @@ export default {
       this.fetchMeals(),
       this.fetchTagSuggestions()
     ]);
+
+    // Check if we have a date query parameter
+    const dateParam = this.$route.query.date;
+    if (dateParam) {
+      this.selectDate(dateParam);
+    }
+  },
+  watch: {
+    // Watch for route changes to handle navigation between meals
+    '$route.query.date'(newDate) {
+      if (newDate) {
+        this.selectDate(newDate);
+      }
+    }
   }
 };
 </script>
