@@ -3,6 +3,31 @@
     <div class="content-wrapper">
       <div class="recipes-layout">
         <div class="main-content">
+          <div class="recipe-actions">
+            <button @click="suggestRecipe" class="suggest-button">Suggest Recipe</button>
+          </div>
+          
+          <!-- Recipe Suggestion -->
+          <div v-if="currentSuggestion" class="recipe-suggestion">
+            <h3>Suggested Recipe</h3>
+            <div class="suggestion-content">
+              <div class="suggestion-name">{{ currentSuggestion.name }}</div>
+              <div class="suggestion-tags">
+                <span v-for="tag in currentSuggestion.tags" 
+                      :key="tag"
+                      class="tag"
+                      :data-tag="tag.toLowerCase()"
+                >
+                  {{ tag }}
+                </span>
+              </div>
+              <div class="suggestion-actions">
+                <button @click="acceptSuggestion" class="accept-button">Accept</button>
+                <button @click="rejectSuggestion" class="reject-button">Reject</button>
+              </div>
+            </div>
+          </div>
+
           <recipe-list ref="recipeList" :selectedTags="selectedTags" />
           <!-- Add filtered meals section -->
           <div v-if="selectedTags.length > 0 && filteredMeals.length > 0" class="filtered-meals">
@@ -61,7 +86,8 @@ export default {
     return {
       selectedTags: [],
       availableTags: [],
-      meals: []
+      meals: [],
+      currentSuggestion: null
     };
   },
   computed: {
@@ -108,6 +134,36 @@ export default {
         name: 'MealPlan',
         query: { date: meal.Date }
       });
+    },
+    async suggestRecipe() {
+      try {
+        const response = await axios.get('/api/suggest-recipe');
+        if (response.data && response.data.recipe) {
+          this.currentSuggestion = response.data.recipe;
+        }
+      } catch (error) {
+        console.error('Error getting recipe suggestion:', error);
+      }
+    },
+    async acceptSuggestion() {
+      if (!this.currentSuggestion) return;
+      
+      try {
+        await axios.post('/api/recipes', {
+          Name: this.currentSuggestion.name,
+          Tags: this.currentSuggestion.tags.join(', ')
+        });
+        this.currentSuggestion = null;
+        // Refresh recipe list
+        if (this.$refs.recipeList) {
+          this.$refs.recipeList.fetchRecipes();
+        }
+      } catch (error) {
+        console.error('Error accepting suggestion:', error);
+      }
+    },
+    rejectSuggestion() {
+      this.currentSuggestion = null;
     }
   },
   async mounted() {
@@ -375,6 +431,89 @@ export default {
 .filter-tag.active {
   filter: brightness(0.9);
   font-weight: 500;
+}
+
+.recipe-actions {
+  margin-bottom: 1rem;
+}
+
+.suggest-button {
+  background-color: #4CAF50;
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 1rem;
+  transition: background-color 0.2s;
+}
+
+.suggest-button:hover {
+  background-color: #45a049;
+}
+
+.recipe-suggestion {
+  background: white;
+  padding: 1.5rem;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  margin-bottom: 1.5rem;
+}
+
+.recipe-suggestion h3 {
+  margin: 0 0 1rem 0;
+  color: #2c3e50;
+}
+
+.suggestion-content {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.suggestion-name {
+  font-size: 1.2rem;
+  font-weight: 500;
+  color: #2c3e50;
+}
+
+.suggestion-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.suggestion-actions {
+  display: flex;
+  gap: 1rem;
+  margin-top: 0.5rem;
+}
+
+.accept-button, .reject-button {
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: all 0.2s;
+}
+
+.accept-button {
+  background-color: #4CAF50;
+  color: white;
+}
+
+.accept-button:hover {
+  background-color: #45a049;
+}
+
+.reject-button {
+  background-color: #f44336;
+  color: white;
+}
+
+.reject-button:hover {
+  background-color: #da190b;
 }
 
 @media (max-width: 768px) {

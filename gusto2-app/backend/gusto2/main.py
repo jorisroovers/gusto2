@@ -674,6 +674,17 @@ async def suggest_meals(suggestion_request: MealSuggestionRequest):
         logger.error(f"Failed to get meal suggestions: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to get meal suggestions: {str(e)}")
 
+@app.get("/api/suggest-recipe")
+async def suggest_recipe():
+    """Return a hardcoded recipe suggestion"""
+    return {
+        "recipe": {
+            "name": "Spaghetti Carbonara",
+            "tags": ["Italian", "Pasta", "Quick", "Easy"],
+            "id": "suggestion-1"  # Adding an ID to track this suggestion
+        }
+    }
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
