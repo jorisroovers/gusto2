@@ -615,16 +615,19 @@ export default {
     // Handle rule-based meal suggestions
     async handleRuleSuggestion({ meal, index }) {
       try {
+        // Create the meal data structure expected by the backend
         const mealData = {
           Name: meal.name,
-          Tags: meal.tags
+          Tags: meal.tags || '',
+          Notes: ''
         };
         
         const response = await axios.put(`/api/meal/${index}`, mealData);
         
         if (response.data.status === 'success') {
+          // Update the local meals array with the full meal structure
           this.meals[index] = {
-            ...this.meals[index],
+            ...this.meals[index], // Keep existing fields like Date
             ...mealData
           };
           

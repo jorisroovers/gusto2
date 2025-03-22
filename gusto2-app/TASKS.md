@@ -1,6 +1,6 @@
 Make App name clickable, the mealplan should be the homepage.
 
-Give the different tags appropriate colors. Use same colors on recipes and Meal plan pages.
+In the rule that checks whether meals are not planned more than once in 3 weeks, deeplink the violating meals to the recipes page, so when clicked the recipe page shows that recipe (and including all the meals planned for that recipe, which is already implemented).
 
 Recipes should be auto-populated when loading meals, so that we don't have to explicitly click the populate from meal plan button.
 
