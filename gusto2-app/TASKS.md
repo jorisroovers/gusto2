@@ -2,8 +2,6 @@ Make App name clickable, the mealplan should be the homepage.
 
 
 
-Recipes should be auto-populated when loading meals, so that we don't have to explicitly click the populate from meal plan button.
-
 When clicking Get Rule-Based Suggestions, get different suggestions every time - the logic of the suggested meals itself shouldn't change.
 
 On the recipe page, add a "Suggest" button which should call a backend API endpoint which can for now just return some hardcoded recipe suggestion. On the front-end, there should be the ability to accept or reject the suggestion. The suggested recipe should come with associated tags.

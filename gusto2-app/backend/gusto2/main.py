@@ -424,7 +424,8 @@ async def save_meals(meals: List[Dict[str, Any]] = Body(...)):
 @app.get("/api/meals/reload")
 async def reload_meals():
     """Force reload meals from database, discarding any unsaved changes.
-    Also attempts to fetch updated data from Notion if configured."""
+    Also attempts to fetch updated data from Notion if configured.
+    Also reloads recipes based on the reloaded meals."""
     try:
         # Force reload by resetting changed indices
         database.save_changed_indices(set())
@@ -435,6 +436,14 @@ async def reload_meals():
         # Read the meals from the database
         meals = database.read_meals()
         
+        # Reload recipes based on the newly loaded meals
+        try:
+            database.populate_recipes_from_meals()
+            logger.info("Recipes reloaded based on updated meals.")
+        except Exception as recipe_e:
+            # Log the error but don't fail the whole request
+            logger.error(f"Failed to reload recipes after reloading meals: {recipe_e}")
+
         return {
             "status": "success", 
             "message": "Meals reloaded successfully" + (" (updated from Notion)" if notion_fetch_success else " (from database)"), 
