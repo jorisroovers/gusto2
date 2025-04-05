@@ -8,6 +8,7 @@
         <div class="nav-links">
           <router-link to="/mealplan" class="nav-link" active-class="active">Meal Plan</router-link>
           <router-link to="/recipes" class="nav-link" active-class="active">Recipes</router-link>
+          <router-link to="/order" class="nav-link" active-class="active">Order</router-link>
         </div>
       </div>
     </nav>
