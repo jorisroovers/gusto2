@@ -32,7 +32,6 @@ The prompt to get the ingredients should include:
 - Not to include amounts, only the ingredients themselves
 
 
-
-
+On the ordering page, for each ingredient use the `supermarktconnector` python package, specifically `supermarktconnector.ah` to search for the particular ingredient on the Albert Heijn website. When results are are found, select the best match and then put the title of the found match in parentheses next to the ingredient name on the front-end.
 
 -------

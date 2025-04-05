@@ -701,11 +701,11 @@ export default {
       }
       
       try {
-        // Call the backend to reload this specific meal from Notion
+        // Step 1: Call the backend to reload this specific meal from Notion
         const response = await axios.get(`/api/meal/${mealIndex}/reload-from-notion`);
         
         if (response.data && response.data.status === 'success') {
-          // Update just this specific meal with the reloaded data from Notion
+          // Step 2: Update just this specific meal with the reloaded data from Notion
           const updatedMeal = response.data.meal;
           
           // Preserve the Date property and update other properties
@@ -714,9 +714,19 @@ export default {
             Date: this.meals[mealIndex].Date // Make sure we keep the original Date
           };
           
-          // Update the changedIndices - this meal might be removed or added to changed indices
-          this.changedIndices = response.data.changedIndices || [];
+          // Step 3: Remove this meal from the changedIndices array in the frontend
+          this.changedIndices = this.changedIndices.filter(index => index !== mealIndex);
           this.hasChanges = this.changedIndices.length > 0;
+          
+          // Step 4: Make a separate call to explicitly persist the removal of this index from changedIndices
+          // This ensures the change persists through page refreshes
+          try {
+            // We need to save all meals to persist the changes to the backend
+            await axios.post('/api/meals/save', this.meals);
+          } catch (saveError) {
+            console.error('Failed to persist undo changes:', saveError);
+            // Don't show error to user as the main functionality worked
+          }
           
           this.showNotification('Meal reloaded from Notion successfully!', 'success');
         } else {
