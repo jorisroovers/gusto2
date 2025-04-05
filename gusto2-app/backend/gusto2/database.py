@@ -61,6 +61,14 @@ class ChangedIndexModel(Base):
     id = Column(Integer, primary_key=True, index=True)
     index = Column(Integer, unique=True, index=True)
 
+class IngredientModel(Base):
+    __tablename__ = "ingredients"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    meal_name = Column(String, unique=True, index=True)
+    ingredients_json = Column(Text)
+    last_updated = Column(Date, default=datetime.now)
+
 # Create tables if they don't exist
 def init_db():
     try:

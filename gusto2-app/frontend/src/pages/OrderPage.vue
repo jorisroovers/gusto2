@@ -52,12 +52,25 @@
           
           <div class="ingredients-section">
             <h4>Ingredients:</h4>
-            <!-- Placeholder ingredients - will be replaced with real data later -->
-            <ul class="ingredients-list">
-              <li v-for="(ingredient, index) in getPlaceholderIngredients()" :key="index">
+            <!-- Ingredients with loading state -->
+            <div v-if="ingredientsLoading" class="ingredients-loading">
+              <div class="loading-spinner"></div>
+              <p>Fetching ingredients...</p>
+            </div>
+            <ul v-else-if="currentIngredients.length > 0" class="ingredients-list">
+              <li v-for="(ingredient, index) in currentIngredients" :key="index">
                 {{ ingredient }}
               </li>
             </ul>
+            <div v-else-if="ingredientsFetchAttempted" class="no-ingredients">
+              <p>No ingredients found for this meal.</p>
+              <button class="btn-retry" @click="fetchIngredients">Try Again</button>
+            </div>
+            <div v-else class="click-to-fetch">
+              <button class="btn-fetch-ingredients" @click="fetchIngredients">
+                Load Ingredients
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -76,8 +89,17 @@ export default {
       upcomingMeals: [],
       selectedMeal: null,
       loading: true,
-      error: null
+      error: null,
+      mealIngredients: {}, // Store ingredients for each meal
+      ingredientsLoading: false,
+      ingredientsFetchAttempted: false
     };
+  },
+  computed: {
+    currentIngredients() {
+      if (!this.selectedMeal || !this.selectedMeal.Name) return [];
+      return this.mealIngredients[this.selectedMeal.Name] || [];
+    }
   },
   methods: {
     async fetchMeals() {
@@ -88,6 +110,7 @@ export default {
         if (response.data && response.data.meals) {
           this.meals = response.data.meals;
           this.filterUpcomingMeals();
+          this.loadIngredientsFromLocalStorage();
         } else {
           this.error = 'No meals data found';
         }
@@ -129,6 +152,7 @@ export default {
     
     selectMeal(meal) {
       this.selectedMeal = meal;
+      this.ingredientsFetchAttempted = this.mealIngredients[meal.Name] !== undefined;
     },
     
     formatDate(dateString) {
@@ -138,58 +162,51 @@ export default {
       return date.toLocaleDateString(undefined, options);
     },
     
-    getPlaceholderIngredients() {
-      // If no meal is selected, return empty array
-      if (!this.selectedMeal || !this.selectedMeal.Name) {
-        return [];
+    async fetchIngredients() {
+      if (!this.selectedMeal || !this.selectedMeal.Name) return;
+      
+      const mealName = this.selectedMeal.Name;
+      this.ingredientsLoading = true;
+      this.ingredientsFetchAttempted = true;
+      
+      try {
+        const response = await axios.get(`/api/meal/${encodeURIComponent(mealName)}/ingredients`);
+        if (response.data && response.data.status === 'success') {
+          // Store ingredients for this meal
+          this.mealIngredients = {
+            ...this.mealIngredients,
+            [mealName]: response.data.ingredients
+          };
+          
+          // Save to localStorage for persistence
+          this.saveIngredientsToLocalStorage();
+        }
+      } catch (error) {
+        console.error('Error fetching ingredients:', error);
+        // Set empty array for this meal to indicate we tried to fetch
+        this.mealIngredients[mealName] = [];
+      } finally {
+        this.ingredientsLoading = false;
       }
-      
-      // Generate some placeholder ingredients based on the meal name
-      // This will be replaced with real ingredients from the backend later
-      const basicIngredients = [
-        '500g mixed vegetables',
-        '2 tablespoons olive oil',
-        '1 onion, chopped',
-        '2 cloves garlic, minced',
-        'Salt and pepper to taste',
-        'Fresh herbs (optional)'
-      ];
-      
-      const proteinIngredients = [];
-      
-      // Add protein based on tags or meal name
-      const mealNameLower = this.selectedMeal.Name.toLowerCase();
-      const tags = this.selectedMeal.Tags ? this.selectedMeal.Tags.toLowerCase() : '';
-      
-      if (mealNameLower.includes('chicken') || tags.includes('chicken') || tags.includes('kip')) {
-        proteinIngredients.push('500g chicken breast, diced');
-      } else if (mealNameLower.includes('beef') || tags.includes('beef') || tags.includes('gehakt')) {
-        proteinIngredients.push('500g ground beef');
-      } else if (mealNameLower.includes('fish') || mealNameLower.includes('salmon') || 
-                tags.includes('fish') || tags.includes('zalm')) {
-        proteinIngredients.push('500g salmon fillet');
-      } else if (tags.includes('vegetarisch') || tags.includes('vegan')) {
-        proteinIngredients.push('250g tofu, cubed');
-        proteinIngredients.push('1 can chickpeas, drained');
-      } else {
-        // Default protein
-        proteinIngredients.push('500g protein of choice');
+    },
+    
+    loadIngredientsFromLocalStorage() {
+      try {
+        const savedIngredients = localStorage.getItem('mealIngredients');
+        if (savedIngredients) {
+          this.mealIngredients = JSON.parse(savedIngredients);
+        }
+      } catch (error) {
+        console.error('Error loading ingredients from localStorage:', error);
       }
-      
-      // Add starch based on tags or meal name
-      const starchIngredients = [];
-      if (mealNameLower.includes('pasta') || tags.includes('pasta')) {
-        starchIngredients.push('350g pasta');
-      } else if (mealNameLower.includes('rice') || tags.includes('rice') || tags.includes('rijst')) {
-        starchIngredients.push('2 cups rice');
-      } else if (mealNameLower.includes('potato') || tags.includes('potato') || tags.includes('aardappel')) {
-        starchIngredients.push('4 large potatoes');
-      } else {
-        // Default starch
-        starchIngredients.push('Side dish of choice');
+    },
+    
+    saveIngredientsToLocalStorage() {
+      try {
+        localStorage.setItem('mealIngredients', JSON.stringify(this.mealIngredients));
+      } catch (error) {
+        console.error('Error saving ingredients to localStorage:', error);
       }
-      
-      return [...proteinIngredients, ...starchIngredients, ...basicIngredients];
     }
   },
   async mounted() {
@@ -321,7 +338,7 @@ export default {
 }
 
 .ingredients-section h4 {
-  margin-bottom: 0.5rem;
+  margin-bottom: 1rem;
   color: #495057;
 }
 
@@ -332,13 +349,69 @@ export default {
 }
 
 .ingredients-list li {
-  padding: 8px 0;
-  border-bottom: 1px solid #f1f3f5;
+  padding: 10px 15px;
+  margin-bottom: 8px;
+  border-radius: 4px;
+  background-color: #f8f9fa;
   color: #495057;
+  font-size: 0.95rem;
+  border-left: 3px solid #90caf9;
 }
 
-.ingredients-list li:last-child {
-  border-bottom: none;
+/* Loading spinner and states */
+.ingredients-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem 0;
+}
+
+.loading-spinner {
+  border: 3px solid #f3f3f3;
+  border-top: 3px solid #3498db;
+  border-radius: 50%;
+  width: 30px;
+  height: 30px;
+  animation: spin 1s linear infinite;
+  margin-bottom: 1rem;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.btn-fetch-ingredients,
+.btn-retry {
+  background-color: #3498db;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 8px 16px;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  margin-top: 10px;
+}
+
+.btn-fetch-ingredients:hover,
+.btn-retry:hover {
+  background-color: #2980b9;
+}
+
+.click-to-fetch,
+.no-ingredients {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 1.5rem 0;
+  text-align: center;
+}
+
+.no-ingredients p {
+  color: #6c757d;
+  margin-bottom: 1rem;
 }
 
 /* Tag styling (copied from MealPlanPage.vue) */
