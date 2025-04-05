@@ -2,7 +2,9 @@
   <div id="app">
     <nav class="top-nav">
       <div class="nav-content">
-        <h1>Gusto2 App</h1>
+        <router-link to="/mealplan" class="app-title">
+          <h1>Gusto2 App</h1>
+        </router-link>
         <div class="nav-links">
           <router-link to="/mealplan" class="nav-link" active-class="active">Meal Plan</router-link>
           <router-link to="/recipes" class="nav-link" active-class="active">Recipes</router-link>
@@ -51,11 +53,21 @@ export default {
   width: 100%;
 }
 
+.app-title {
+  text-decoration: none;
+  cursor: pointer;
+}
+
 .top-nav h1 {
   margin: 0;
   color: #2c3e50;
   font-size: 1.5rem;
   font-weight: 600;
+  transition: color 0.3s ease;
+}
+
+.app-title:hover h1 {
+  color: #3498db;
 }
 
 .nav-links {

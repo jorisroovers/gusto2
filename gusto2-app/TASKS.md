@@ -4,6 +4,10 @@ Make App name clickable, the mealplan should be the homepage.
 Tests?
 
 # Mealplan
+
+In the edit mealplan form, add auto completion for recipes.
+
+
 When clicking Get Rule-Based Suggestions, get different suggestions every time - the logic of the suggested meals itself shouldn't change.
 
 Add an undo button which reloads the particular meal from notion
