@@ -216,6 +216,7 @@ def fetch_from_notion():
             return False
         
         # Clear existing meals from the database and insert new data from Notion
+        # This is only called from the reload_meals endpoint when the user explicitly clicks the "Reload" button
         with database.SessionLocal() as db:
             # Delete all existing meals
             db.query(database.MealModel).delete()

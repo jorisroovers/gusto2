@@ -64,8 +64,7 @@ class ChangedIndexModel(Base):
 # Create tables if they don't exist
 def init_db():
     try:
-        # Drop and recreate all tables
-        Base.metadata.drop_all(bind=engine)
+        # Only create tables if they don't exist, don't drop existing tables
         Base.metadata.create_all(bind=engine)
     except Exception as e:
         raise
