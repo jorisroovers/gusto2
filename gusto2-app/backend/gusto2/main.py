@@ -5,14 +5,17 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Dict, Any, List, Optional
 import logging
-from datetime import datetime, timedelta
 import requests
 import json
 from openai import AsyncOpenAI
 import random
+from datetime import datetime  # Removed unused timedelta
 
 # Import from our database module
 from gusto2 import database
+
+# Store history of previously suggested recipes to avoid repetition
+SUGGESTED_RECIPES_HISTORY = []
 
 # Example recipes will be loaded from database, but if database is empty, use these fallback examples
 FALLBACK_EXAMPLE_RECIPES = [
@@ -702,15 +705,16 @@ async def suggest_recipe():
         raise HTTPException(status_code=500, detail="OpenAI API key not configured")
     
     try:
-        # Get existing recipes for context
-        recipes_df = database.read_recipes()
-        existing_recipes = recipes_df['Name'].tolist() if not recipes_df.empty else []
-        
         # Get 5 random example recipes for the prompt
         example_recipes = random.sample(FALLBACK_EXAMPLE_RECIPES, 5)
-        example_json = json.dumps(example_recipes[0], indent=2)
         
-        # Create a prompt that includes existing recipes for context
+        # Create history context
+        history_context = ""
+        if SUGGESTED_RECIPES_HISTORY:
+            history_context = "\n\nPreviously suggested recipes (DO NOT suggest these again):\n"
+            history_context += json.dumps([r["name"] for r in SUGGESTED_RECIPES_HISTORY], indent=2)
+        
+        # Create a prompt that includes history for context
         system_prompt = """You are a cooking expert that suggests recipes. 
         You must respond with a raw JSON object (no markdown, no backticks, no formatting).
         The response must be a single JSON object with exactly this structure:
@@ -719,21 +723,15 @@ async def suggest_recipe():
             "tags": ["tag1", "tag2", ...]
         }
         Do not include any explanation, markdown formatting, or additional text.
-        The name should be descriptive and unique. Tags should include cuisine type, meal type, dietary info, etc."""
+        The name should be descriptive and unique. Tags should include cuisine type, dietary info, etc."""
         
         user_prompt = f"""Generate a recipe suggestion as a raw JSON object.
-        
-        Here are some EXAMPLE recipes to show the expected format and style (these are just examples, do not copy them):
-        {json.dumps([r["name"] + ": " + ", ".join(r["tags"]) for r in example_recipes], indent=2)}
-        
-        Current recipes in user's collection:
-        {', '.join(existing_recipes[:5]) if existing_recipes else 'No existing recipes yet'}
+        Make sure to suggest something different from these previously suggested recipes:{history_context}
         
         Remember to return ONLY a JSON object with 'name' and 'tags' fields.
         No markdown, no backticks, no explanation text.
-        Format example:
-        {example_json}"""
-        
+        """
+
         logger.info("Calling OpenAI API with prompts:")
         logger.info(f"System prompt: {system_prompt}")
         logger.info(f"User prompt: {user_prompt}")
@@ -745,34 +743,26 @@ async def suggest_recipe():
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
             ],
-            temperature=0.7,
+            temperature=1.1,
             response_format={ "type": "json" },
-            max_tokens=300
+            max_tokens=500
         )
         
-        # Log the complete response
-        logger.info("OpenAI API Response:")
-        logger.info(f"Model used: {response.model}")
-        logger.info(f"Response ID: {response.id}")
-        logger.info(f"Raw content: {response.choices[0].message.content}")
-        logger.info(f"Finish reason: {response.choices[0].finish_reason}")
-        logger.info(f"Prompt tokens: {response.usage.prompt_tokens}")
-        logger.info(f"Completion tokens: {response.usage.completion_tokens}")
-        logger.info(f"Total tokens: {response.usage.total_tokens}")
-        
-        # Extract the recipe suggestion and clean up any markdown formatting
-        suggestion = response.choices[0].message.content
-        # Remove any markdown code block markers
-        suggestion = suggestion.strip().replace('```json', '').replace('```', '').strip()
-        
-        # Parse the cleaned JSON
+        # Extract and clean up the suggestion
+        suggestion = response.choices[0].message.content.strip().replace('```json', '').replace('```', '').strip()
         suggestion_data = json.loads(suggestion)
         
-        # Log the parsed suggestion
-        logger.info(f"Parsed suggestion data: {json.dumps(suggestion_data, indent=2)}")
-        
-        # Generate a unique ID for this suggestion
+        # Generate a unique ID and add to history
         suggestion_id = f"suggestion-{random.randint(1000, 9999)}"
+        SUGGESTED_RECIPES_HISTORY.append({
+            "name": suggestion_data.get("name", ""),
+            "tags": suggestion_data.get("tags", []),
+            "id": suggestion_id
+        })
+        
+        # Keep history limited to last 50 suggestions
+        if len(SUGGESTED_RECIPES_HISTORY) > 50:
+            SUGGESTED_RECIPES_HISTORY.pop(0)
         
         return {
             "recipe": {
