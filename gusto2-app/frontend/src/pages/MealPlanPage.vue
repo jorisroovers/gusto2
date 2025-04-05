@@ -80,11 +80,10 @@
               <div v-else class="edit-form">
                 <div class="form-group">
                   <label for="mealName">Meal Name:</label>
-                  <input 
-                    id="mealName" 
-                    type="text" 
+                  <recipe-autocomplete 
                     v-model="editedMeal.Name" 
-                    placeholder="Enter meal name"
+                    placeholder="Search for a recipe..."
+                    @recipe-selected="onRecipeSelected"
                   />
                 </div>
                 <div class="form-group">
@@ -188,13 +187,15 @@ import axios from 'axios';
 import CalendarPicker from '../components/CalendarPicker.vue';
 import MealPlanRules from '../components/MealPlanRules.vue';
 import TagInput from '../components/TagInput.vue';
+import RecipeAutocomplete from '../components/RecipeAutocomplete.vue';
 
 export default {
   name: 'MealPlanPage',
   components: {
     CalendarPicker,
     MealPlanRules,
-    TagInput
+    TagInput,
+    RecipeAutocomplete
   },
   data() {
     return {
@@ -656,7 +657,14 @@ export default {
       } catch (error) {
         console.error('Error fetching tag suggestions:', error);
       }
-    }
+    },
+
+    onRecipeSelected(recipe) {
+      // When a recipe is selected from autocomplete, also set its tags
+      if (recipe && recipe.Tags) {
+        this.editedMeal.Tags = recipe.Tags;
+      }
+    },
   },
   async mounted() {
     await Promise.all([
