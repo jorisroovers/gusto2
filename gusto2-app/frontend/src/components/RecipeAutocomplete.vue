@@ -67,9 +67,20 @@ export default {
       const input = this.inputValue.toLowerCase();
       if (!input) return this.recipes;
       
-      return this.recipes.filter(recipe => 
-        recipe.Name.toLowerCase().includes(input)
-      );
+      return this.recipes.filter(recipe => {
+        // Match on recipe name
+        if (recipe.Name.toLowerCase().includes(input)) {
+          return true;
+        }
+        
+        // Match on tags
+        if (recipe.Tags) {
+          const tags = recipe.Tags.toLowerCase().split(',').map(tag => tag.trim());
+          return tags.some(tag => tag.includes(input));
+        }
+        
+        return false;
+      });
     }
   },
   watch: {
