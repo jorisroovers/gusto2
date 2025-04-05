@@ -682,14 +682,30 @@ export default {
     },
 
     async confirmUndo() {
-      this.loading = true;
+      // Set loading state only for this specific meal
+      const mealIndex = this.currentIndex;
+      // Use direct property assignment in Vue 3 instead of $set
+      if (!this.meals[mealIndex].isLoading) {
+        // Use direct assignment for Vue 3 reactivity
+        this.meals[mealIndex] = {
+          ...this.meals[mealIndex],
+          isLoading: true
+        };
+      }
+      
       try {
         // Call the backend to reload this specific meal from Notion
-        const response = await axios.get(`/api/meal/${this.currentIndex}/reload-from-notion`);
+        const response = await axios.get(`/api/meal/${mealIndex}/reload-from-notion`);
         
         if (response.data && response.data.status === 'success') {
-          // Update local meal data with the reloaded data from Notion
-          this.meals[this.currentIndex] = response.data.meal;
+          // Update just this specific meal with the reloaded data from Notion
+          const updatedMeal = response.data.meal;
+          
+          // Preserve the Date property and update other properties
+          this.meals[mealIndex] = {
+            ...updatedMeal,
+            Date: this.meals[mealIndex].Date // Make sure we keep the original Date
+          };
           
           // Update the changedIndices - this meal might be removed or added to changed indices
           this.changedIndices = response.data.changedIndices || [];
@@ -702,7 +718,13 @@ export default {
       } catch (error) {
         this.showNotification('Failed to reload meal from Notion: ' + (error.response?.data?.message || error.message), 'error');
       } finally {
-        this.loading = false;
+        // Remove the loading state for this specific meal
+        if (this.meals[mealIndex]) {
+          this.meals[mealIndex] = {
+            ...this.meals[mealIndex],
+            isLoading: false
+          };
+        }
         this.showUndoConfirmation = false;
       }
     },
