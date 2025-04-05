@@ -64,8 +64,15 @@
                     </div>
                   </div>
                 </div>
+                
+                <!-- Add loading spinner when a specific meal is being reloaded -->
+                <div v-if="currentMeal.isLoading" class="meal-loading-spinner">
+                  <div class="spinner"></div>
+                  <p>Reloading meal from Notion...</p>
+                </div>
+                
                 <!-- Add tags display -->
-                <div v-if="currentMeal.Tags" class="meal-tags">
+                <div v-else-if="currentMeal.Tags" class="meal-tags">
                   <div class="tags-container">
                     <span v-for="tag in currentMeal.Tags.split(',')" 
                           :key="tag.trim()" 
@@ -1305,6 +1312,37 @@ export default {
 .tag {
   background-color: #f5f5f5;
   color: #424242;
+}
+
+/* Add styles for the meal loading spinner */
+.meal-loading-spinner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100px;
+  margin: 20px 0;
+}
+
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid rgba(52, 152, 219, 0.2);
+  border-radius: 50%;
+  border-top-color: #3498db;
+  animation: spin 1s ease-in-out infinite;
+  margin-bottom: 10px;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.meal-loading-spinner p {
+  color: #3498db;
+  font-size: 14px;
 }
 
 /* Desktop layout */
