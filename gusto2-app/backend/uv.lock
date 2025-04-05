@@ -157,6 +157,7 @@ dependencies = [
     { name = "requests" },
     { name = "sqlalchemy" },
     { name = "starlette" },
+    { name = "supermarktconnector" },
     { name = "uvicorn" },
 ]
 
@@ -169,6 +170,7 @@ requires-dist = [
     { name = "requests", specifier = ">=2.31.0" },
     { name = "sqlalchemy" },
     { name = "starlette", specifier = "==0.45.0" },
+    { name = "supermarktconnector", specifier = "==0.8.1" },
     { name = "uvicorn", specifier = "==0.34.0" },
 ]
 
@@ -490,6 +492,18 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/e9/dc/9b3204e7bdc7c2b7589b604259b32b6b1dcc28faa2f51969d4968510845d/starlette-0.45.0.tar.gz", hash = "sha256:ca7ee855c243a058a2f24bc832b8072bade47fbc2672ce4b98de66c7f6c924f0", size = 2574214 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/71/33/648fb0d0990650377a2fbcbc4e5cf760012cdc5ba35c471abbe6f3dc15e8/starlette-0.45.0-py3-none-any.whl", hash = "sha256:c911ba0e86eed5b336931623f45e56a8c6d76c618f2749d9f5ed9ee55a5bf1bb", size = 71795 },
+]
+
+[[package]]
+name = "supermarktconnector"
+version = "0.8.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "requests" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/fa/f5/3b0ddb59317d93762c9c767f4f3b841e0cf957d8c854bcdbfe1ccc3950be/supermarktconnector-0.8.1.tar.gz", hash = "sha256:69ed9297eac80c1b55aaaf6bc18ac1859daf59bc10bbd38a285d99287522a62d", size = 7392 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ff/b5/35c6cd9ca6fc93090761ed138f1ce6f5b5d1e0a923c402ae38ddbaf73d50/supermarktconnector-0.8.1-py3-none-any.whl", hash = "sha256:f520b9fdef923daab2972775d434d32b28f7ac4ffd1d3a2e3a6d884294949b37", size = 7350 },
 ]
 
 [[package]]

@@ -10,6 +10,7 @@ import json
 from openai import AsyncOpenAI
 import random
 from datetime import datetime  # Removed unused timedelta
+from supermarktconnector.ah import AHConnector
 
 # Import from our database module
 from gusto2 import database
@@ -97,6 +98,14 @@ class MealSuggestionRequest(BaseModel):
 
 class MealValidator(BaseModel):
     date: Optional[str] = None
+
+# Albert Heijn product search models
+class ProductSearchRequest(BaseModel):
+    ingredient: str
+
+class ProductSearchResult(BaseModel):
+    products: list = []
+    ingredient: str
 
 def fetch_from_notion():
     """Fetch meal data from Notion database and save to database"""
@@ -350,6 +359,12 @@ database.init_db()
 
 # Initialize by loading page IDs from database
 database.load_notion_page_ids()
+
+# Initialize Albert Heijn connector
+ah_connector = AHConnector()
+
+# Cache for Albert Heijn product search results
+ah_product_cache = {}
 
 @app.get("/api/meals")
 async def get_meals():
@@ -990,6 +1005,158 @@ async def get_meal_ingredients(meal_name: str):
     except Exception as e:
         logger.error(f"Failed to get ingredients for {meal_name}: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to get ingredients: {str(e)}")
+
+@app.get("/api/ingredients/{ingredient}/products")
+async def search_ah_products(ingredient: str):
+    """Search for products at Albert Heijn based on an ingredient name"""
+    try:
+        # Check cache first
+        if ingredient in ah_product_cache:
+            logger.info(f"Using cached product results for {ingredient}")
+            return ah_product_cache[ingredient]
+        
+        logger.info(f"Searching Albert Heijn for products matching: {ingredient}")
+        
+        # Clean up the ingredient name for better search results
+        clean_ingredient = ingredient.strip().lower()
+        
+        # Use AH connector to search for products
+        raw_products = ah_connector.search_products(clean_ingredient)
+        
+        # Process and filter the results
+        processed_results = []
+        product_limit = 10
+        products_count = 0
+        
+        # Handle different response formats from the supermarktconnector API
+        if isinstance(raw_products, dict):
+            logger.info(f"Processing dictionary response for {ingredient}")
+            # If it's a dictionary, extract the products list which is often in 'cards' or 'products'
+            products_list = []
+            # Check common keys where products might be stored
+            for key in ['cards', 'products', 'items', 'results']:
+                if key in raw_products and isinstance(raw_products[key], list):
+                    products_list = raw_products[key]
+                    break
+            
+            # If we found a list in the dictionary, process it
+            if products_list:
+                logger.info(f"Found {len(products_list)} products in dictionary under key")
+                for product in products_list:
+                    if products_count >= product_limit:
+                        break
+                    
+                    # Extract product details safely
+                    try:
+                        if not isinstance(product, dict):
+                            continue
+                            
+                        # For dictionary responses, products might be nested under 'product'
+                        actual_product = product.get('product', product)
+                        if not isinstance(actual_product, dict):
+                            continue
+                            
+                        processed_product = extract_product_data(actual_product)
+                        if processed_product:
+                            processed_results.append(processed_product)
+                            products_count += 1
+                    except Exception as e:
+                        logger.warning(f"Error processing dictionary product: {str(e)}")
+                        continue
+        elif isinstance(raw_products, list):
+            logger.info(f"Processing list response with {len(raw_products)} products for {ingredient}")
+            # If it's a list, process each product directly
+            for product in raw_products:
+                if products_count >= product_limit:
+                    break
+                
+                try:
+                    if not isinstance(product, dict):
+                        logger.warning(f"Skipping non-dict product: {type(product)}")
+                        continue
+                    
+                    processed_product = extract_product_data(product)
+                    if processed_product:
+                        processed_results.append(processed_product)
+                        products_count += 1
+                except Exception as e:
+                    logger.warning(f"Error processing list product: {str(e)}")
+                    continue
+        else:
+            logger.warning(f"Unexpected products type: {type(raw_products)}")
+        
+        # Cache the results
+        result = {
+            "status": "success",
+            "products": processed_results,
+            "ingredient": ingredient
+        }
+        ah_product_cache[ingredient] = result
+        
+        return result
+    except Exception as e:
+        logger.error(f"Failed to search Albert Heijn products for {ingredient}: {str(e)}")
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Failed to search for products: {str(e)}"
+        )
+
+def extract_product_data(product):
+    """Extract product data safely from various product formats"""
+    try:
+        # Skip products without an ID
+        product_id = str(product.get("webshopId", product.get("id", "")))
+        if not product_id:
+            return None
+        
+        # Extract product title
+        product_name = product.get("title", product.get("name", "Unknown Product"))
+        
+        # Extract price data safely
+        price = 0
+        price_data = product.get("priceBeforeBonus", product.get("price", {}))
+        if isinstance(price_data, dict):
+            price = price_data.get("amount", price_data.get("value", 0))
+        elif isinstance(price_data, (int, float)):
+            price = price_data
+        
+        # Extract first image URL safely
+        image_url = ""
+        images = product.get("images", product.get("image", []))
+        if isinstance(images, list) and len(images) > 0:
+            if isinstance(images[0], dict):
+                image_url = images[0].get("url", images[0].get("src", ""))
+            elif isinstance(images[0], str):
+                image_url = images[0]
+        elif isinstance(images, dict):
+            image_url = images.get("url", images.get("src", ""))
+        elif isinstance(images, str):
+            image_url = images
+        
+        # Check for bonus safely
+        has_bonus = False
+        discount = product.get("discount", product.get("bonus", {}))
+        if isinstance(discount, dict):
+            has_bonus = discount.get("bonusType") is not None or discount.get("isBonus", False)
+        elif isinstance(discount, bool):
+            has_bonus = discount
+        
+        # Get unit price safely
+        unit_price = product.get("unitPriceDescription", product.get("unitPrice", ""))
+        
+        # Create a simplified product object with only the data we need
+        return {
+            "id": product_id,
+            "name": product_name,
+            "price": price,
+            "unit_price": unit_price,
+            "image_url": image_url,
+            "url": f"https://www.ah.nl/producten/product/{product_id}",
+            "bonus": has_bonus
+        }
+    except Exception as e:
+        logger.warning(f"Error extracting product data: {str(e)}")
+        return None
 
 if __name__ == "__main__":
     import uvicorn

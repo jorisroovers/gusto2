@@ -17,6 +17,7 @@ dependencies = [
     "requests>=2.31.0",
     "sqlalchemy",  # Adding SQLAlchemy for database ORM
     "openai>=1.0.0",  # For recipe suggestions
+    "supermarktconnector==0.8.1",  # For Albert Heijn product search
 ]
 
 [build-system]

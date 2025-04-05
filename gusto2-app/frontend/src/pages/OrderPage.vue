@@ -58,8 +58,49 @@
               <p>Fetching ingredients...</p>
             </div>
             <ul v-else-if="currentIngredients.length > 0" class="ingredients-list">
-              <li v-for="(ingredient, index) in currentIngredients" :key="index">
-                {{ ingredient }}
+              <li 
+                v-for="(ingredient, index) in currentIngredients" 
+                :key="index"
+                @click="toggleProductSuggestions(ingredient)"
+                :class="{ 'active': activeIngredient === ingredient }"
+              >
+                <div class="ingredient-row">
+                  <span class="ingredient-name">{{ ingredient }}</span>
+                  <span class="ingredient-action">
+                    <i v-if="activeIngredient === ingredient" class="chevron up"></i>
+                    <i v-else class="chevron down"></i>
+                  </span>
+                </div>
+                <div v-if="activeIngredient === ingredient" class="product-suggestions">
+                  <div v-if="productLoading" class="loading-products">
+                    <div class="loading-spinner small"></div>
+                    <span>Loading products...</span>
+                  </div>
+                  <div v-else-if="currentProducts.length === 0" class="no-products">
+                    No products found for this ingredient
+                  </div>
+                  <div v-else class="products-container">
+                    <div 
+                      v-for="product in currentProducts" 
+                      :key="product.id" 
+                      class="product-card"
+                      @click.stop="openProductUrl(product.url)"
+                    >
+                      <div class="product-image">
+                        <img v-if="product.image_url" :src="product.image_url" :alt="product.name">
+                        <div v-else class="no-image">No image</div>
+                      </div>
+                      <div class="product-info">
+                        <div class="product-name">{{ product.name }}</div>
+                        <div class="product-price">
+                          <span>€{{ formatPrice(product.price) }}</span>
+                          <span v-if="product.unit_price" class="unit-price">{{ product.unit_price }}</span>
+                        </div>
+                        <div v-if="product.bonus" class="bonus-label">BONUS</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </li>
             </ul>
             <div v-else-if="ingredientsFetchAttempted" class="no-ingredients">
@@ -92,7 +133,11 @@ export default {
       error: null,
       mealIngredients: {}, // Store ingredients for each meal
       ingredientsLoading: false,
-      ingredientsFetchAttempted: false
+      ingredientsFetchAttempted: false,
+      activeIngredient: null, // Currently selected ingredient for product suggestions
+      productCache: {}, // Cache for product suggestions
+      productLoading: false,
+      currentProducts: []
     };
   },
   computed: {
@@ -111,6 +156,7 @@ export default {
           this.meals = response.data.meals;
           this.filterUpcomingMeals();
           this.loadIngredientsFromLocalStorage();
+          this.loadProductCacheFromLocalStorage();
         } else {
           this.error = 'No meals data found';
         }
@@ -153,6 +199,7 @@ export default {
     selectMeal(meal) {
       this.selectedMeal = meal;
       this.ingredientsFetchAttempted = this.mealIngredients[meal.Name] !== undefined;
+      this.activeIngredient = null; // Reset active ingredient when changing meals
     },
     
     formatDate(dateString) {
@@ -207,6 +254,75 @@ export default {
       } catch (error) {
         console.error('Error saving ingredients to localStorage:', error);
       }
+    },
+    
+    loadProductCacheFromLocalStorage() {
+      try {
+        const savedProductCache = localStorage.getItem('productCache');
+        if (savedProductCache) {
+          this.productCache = JSON.parse(savedProductCache);
+        }
+      } catch (error) {
+        console.error('Error loading product cache from localStorage:', error);
+      }
+    },
+    
+    saveProductCacheToLocalStorage() {
+      try {
+        localStorage.setItem('productCache', JSON.stringify(this.productCache));
+      } catch (error) {
+        console.error('Error saving product cache to localStorage:', error);
+      }
+    },
+    
+    async toggleProductSuggestions(ingredient) {
+      // If this ingredient is already active, close it
+      if (this.activeIngredient === ingredient) {
+        this.activeIngredient = null;
+        this.currentProducts = [];
+        return;
+      }
+      
+      // Set active ingredient and reset current products
+      this.activeIngredient = ingredient;
+      this.currentProducts = [];
+      
+      // Check cache first
+      if (this.productCache[ingredient]) {
+        this.currentProducts = this.productCache[ingredient];
+        return;
+      }
+      
+      // Fetch products for this ingredient
+      this.productLoading = true;
+      try {
+        const response = await axios.get(`/api/ingredients/${encodeURIComponent(ingredient)}/products`);
+        if (response.data && response.data.status === 'success') {
+          this.currentProducts = response.data.products;
+          
+          // Cache the products
+          this.productCache = {
+            ...this.productCache,
+            [ingredient]: response.data.products
+          };
+          
+          // Save to localStorage for persistence
+          this.saveProductCacheToLocalStorage();
+        }
+      } catch (error) {
+        console.error('Error fetching product suggestions:', error);
+        this.currentProducts = [];
+      } finally {
+        this.productLoading = false;
+      }
+    },
+    
+    formatPrice(price) {
+      return (price / 100).toFixed(2);
+    },
+    
+    openProductUrl(url) {
+      window.open(url, '_blank');
     }
   },
   async mounted() {
@@ -349,13 +465,158 @@ export default {
 }
 
 .ingredients-list li {
-  padding: 10px 15px;
   margin-bottom: 8px;
   border-radius: 4px;
   background-color: #f8f9fa;
   color: #495057;
   font-size: 0.95rem;
   border-left: 3px solid #90caf9;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.ingredients-list li.active {
+  border-left-color: #1976d2;
+  background-color: #e3f2fd;
+}
+
+.ingredient-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 15px;
+}
+
+.chevron {
+  border-style: solid;
+  border-width: 0.15em 0.15em 0 0;
+  content: '';
+  display: inline-block;
+  height: 0.5em;
+  width: 0.5em;
+  position: relative;
+  vertical-align: middle;
+  margin-left: 0.5em;
+}
+
+.chevron.down {
+  transform: rotate(135deg);
+  top: -0.15em;
+}
+
+.chevron.up {
+  transform: rotate(-45deg);
+  top: 0.15em;
+}
+
+/* Product suggestions styling */
+.product-suggestions {
+  padding: 10px 15px;
+  background-color: #fff;
+  border-top: 1px solid #e9ecef;
+}
+
+.loading-products {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem 0;
+  color: #6c757d;
+}
+
+.loading-spinner.small {
+  width: 20px;
+  height: 20px;
+  margin-right: 10px;
+}
+
+.no-products {
+  color: #6c757d;
+  text-align: center;
+  padding: 1rem 0;
+  font-style: italic;
+}
+
+.products-container {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.product-card {
+  border: 1px solid #e9ecef;
+  border-radius: 4px;
+  overflow: hidden;
+  transition: all 0.2s;
+}
+
+.product-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.product-image {
+  height: 100px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #f8f9fa;
+  overflow: hidden;
+}
+
+.product-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.no-image {
+  color: #adb5bd;
+  font-size: 0.8rem;
+  text-align: center;
+}
+
+.product-info {
+  padding: 8px;
+}
+
+.product-name {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: #212529;
+  margin-bottom: 5px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  height: 2.4em;
+}
+
+.product-price {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #212529;
+  display: flex;
+  flex-direction: column;
+}
+
+.unit-price {
+  font-size: 0.7rem;
+  color: #6c757d;
+  font-weight: normal;
+}
+
+.bonus-label {
+  display: inline-block;
+  background-color: #d32f2f;
+  color: white;
+  font-size: 0.7rem;
+  font-weight: bold;
+  padding: 2px 6px;
+  border-radius: 2px;
+  margin-top: 5px;
 }
 
 /* Loading spinner and states */
@@ -473,6 +734,10 @@ export default {
   
   .meal-details-container {
     width: 60%;
+  }
+  
+  .products-container {
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
   }
 }
 </style>
