@@ -37,7 +37,13 @@
                 <div v-if="currentMeal.Name" class="meal-name">
                   <h3>{{ currentMeal.Name }}</h3>
                   <span v-if="isCurrentMealChanged" class="changed-indicator" title="This meal has unsaved changes">*</span>
-                  <div class="delete-container">
+                  <div class="action-buttons">
+                    <button v-if="!showUndoConfirmation" @click="showUndoConfirmation = true" class="undo-button" title="Reload from Notion">↺</button>
+                    <div v-else class="undo-confirmation">
+                      <span>Reload from Notion?</span>
+                      <button @click="confirmUndo" class="confirm-yes">Yes</button>
+                      <button @click="showUndoConfirmation = false" class="confirm-no">No</button>
+                    </div>
                     <button v-if="!showDeleteConfirmation" @click="showDeleteConfirmation = true" class="delete-button" title="Remove meal">×</button>
                     <div v-else class="delete-confirmation">
                       <span>Delete?</span>
@@ -49,6 +55,14 @@
                 <div v-else class="no-meal-planned">
                   <h3>No meal planned</h3>
                   <span v-if="isCurrentMealChanged" class="changed-indicator" title="This meal has unsaved changes">*</span>
+                  <div class="action-buttons">
+                    <button v-if="!showUndoConfirmation" @click="showUndoConfirmation = true" class="undo-button" title="Reload from Notion">↺</button>
+                    <div v-else class="undo-confirmation">
+                      <span>Reload from Notion?</span>
+                      <button @click="confirmUndo" class="confirm-yes">Yes</button>
+                      <button @click="showUndoConfirmation = false" class="confirm-no">No</button>
+                    </div>
+                  </div>
                 </div>
                 <!-- Add tags display -->
                 <div v-if="currentMeal.Tags" class="meal-tags">
@@ -213,6 +227,7 @@ export default {
       lastViewedDate: null,
       suggestedMeal: null,
       showDeleteConfirmation: false,
+      showUndoConfirmation: false,
       tagSuggestions: []
     };
   },
@@ -665,6 +680,32 @@ export default {
         this.editedMeal.Tags = recipe.Tags;
       }
     },
+
+    async confirmUndo() {
+      this.loading = true;
+      try {
+        // Call the backend to reload this specific meal from Notion
+        const response = await axios.get(`/api/meal/${this.currentIndex}/reload-from-notion`);
+        
+        if (response.data && response.data.status === 'success') {
+          // Update local meal data with the reloaded data from Notion
+          this.meals[this.currentIndex] = response.data.meal;
+          
+          // Update the changedIndices - this meal might be removed or added to changed indices
+          this.changedIndices = response.data.changedIndices || [];
+          this.hasChanges = this.changedIndices.length > 0;
+          
+          this.showNotification('Meal reloaded from Notion successfully!', 'success');
+        } else {
+          throw new Error('Unable to reload meal from Notion');
+        }
+      } catch (error) {
+        this.showNotification('Failed to reload meal from Notion: ' + (error.response?.data?.message || error.message), 'error');
+      } finally {
+        this.loading = false;
+        this.showUndoConfirmation = false;
+      }
+    },
   },
   async mounted() {
     await Promise.all([
@@ -784,6 +825,49 @@ export default {
   margin-left: 8px;
   font-weight: bold;
   font-size: 1.2em;
+}
+
+.action-buttons {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  gap: 8px;
+}
+
+.undo-button {
+  background: none;
+  border: none;
+  color: #3498db;
+  font-size: 1.5em;
+  cursor: pointer;
+  padding: 0 8px;
+}
+
+.undo-confirmation {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.confirm-yes, .confirm-no {
+  padding: 4px 8px;
+  border-radius: 4px;
+  border: 1px solid;
+  cursor: pointer;
+}
+
+.confirm-yes {
+  background-color: #3498db;
+  color: white;
+  border-color: #2980b9;
+}
+
+.confirm-no {
+  background-color: #95a5a6;
+  color: white;
+  border-color: #7f8c8d;
 }
 
 .delete-container {

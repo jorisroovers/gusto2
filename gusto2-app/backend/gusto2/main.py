@@ -786,6 +786,119 @@ async def suggest_recipe():
         logger.error(f"Failed to get recipe suggestion: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to get recipe suggestion: {str(e)}")
 
+@app.get("/api/meal/{index}/reload-from-notion")
+async def reload_meal_from_notion(index: int):
+    """Reload a single meal from Notion based on its index."""
+    try:
+        # First check if the index is valid
+        meals_df = database.read_meals()
+        if index < 0 or index >= len(meals_df):
+            raise HTTPException(status_code=404, detail=f"Meal at index {index} not found")
+        
+        # Get the meal at this index
+        meal_row = meals_df.iloc[index]
+        
+        # Skip if no date (we need it to find the corresponding Notion page)
+        if pd.isna(meal_row.get('Date')) or pd.isnull(meal_row.get('Date')):
+            raise HTTPException(status_code=400, detail=f"Meal at index {index} has no date, cannot reload from Notion")
+        
+        # Format the date for lookup
+        try:
+            if isinstance(meal_row['Date'], str):
+                date_obj = pd.to_datetime(meal_row['Date'], format='%Y/%m/%d')
+            else:
+                date_obj = pd.to_datetime(meal_row['Date'])
+            date_str = date_obj.strftime('%Y/%m/%d')
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Error parsing date for meal at index {index}: {str(e)}")
+        
+        # Find Notion page ID for this date
+        page_id = database.get_notion_page_id(date_str)
+        if not page_id:
+            raise HTTPException(status_code=404, detail=f"No Notion page ID found for date {date_str}")
+        
+        # Set up headers for Notion API
+        if not NOTION_API_TOKEN:
+            raise HTTPException(status_code=500, detail="Notion API token not configured")
+            
+        headers = {
+            "Authorization": f"Bearer {NOTION_API_TOKEN}",
+            "Content-Type": "application/json",
+            "Notion-Version": "2022-06-28"  # Use the current Notion API version
+        }
+        
+        # Fetch the page from Notion
+        url = f"https://api.notion.com/v1/pages/{page_id}"
+        response = requests.get(url, headers=headers)
+        
+        if response.status_code != 200:
+            raise HTTPException(
+                status_code=500, 
+                detail=f"Failed to fetch from Notion API: {response.status_code} - {response.text}"
+            )
+        
+        # Parse the response
+        page_data = response.json()
+        properties = page_data.get("properties", {})
+        
+        # Extract properties from Notion response
+        updated_meal = {}
+        
+        # Extract name if exists
+        if "Name" in properties:
+            name_prop = properties["Name"]
+            if name_prop["type"] == "title" and name_prop.get("title"):
+                title_parts = [part.get("plain_text", "") for part in name_prop.get("title", [])]
+                updated_meal["Name"] = " ".join(title_parts).strip()
+            else:
+                updated_meal["Name"] = ""  # Clear name if empty in Notion
+        else:
+            updated_meal["Name"] = ""
+        
+        # Extract tags if exists
+        if "Tags" in properties:
+            tags_prop = properties["Tags"]
+            if tags_prop["type"] == "multi_select" and tags_prop.get("multi_select"):
+                tags = [tag.get("name", "") for tag in tags_prop.get("multi_select", [])]
+                updated_meal["Tags"] = ", ".join(tags)
+            else:
+                updated_meal["Tags"] = ""  # Clear tags if empty in Notion
+        else:
+            updated_meal["Tags"] = ""
+        
+        # Extract notes if exists
+        if "Notes" in properties:
+            notes_prop = properties["Notes"]
+            if notes_prop["type"] == "rich_text" and notes_prop.get("rich_text"):
+                notes_parts = [part.get("plain_text", "") for part in notes_prop.get("rich_text", [])]
+                updated_meal["Notes"] = " ".join(notes_parts).strip()
+            else:
+                updated_meal["Notes"] = ""  # Clear notes if empty in Notion
+        else:
+            updated_meal["Notes"] = ""
+        
+        # Preserve the date field from our database
+        updated_meal["Date"] = meal_row.get('Date')
+        
+        # Update the meal in our database
+        update_successful = database.update_changeset(index, updated_meal)
+        if not update_successful:
+            raise HTTPException(status_code=500, detail="Failed to update meal in database")
+        
+        # Return the updated meal and the changed indices
+        return {
+            "status": "success",
+            "message": f"Meal at date {date_str} reloaded from Notion",
+            "meal": updated_meal,
+            "changedIndices": list(database.get_changed_indices())
+        }
+        
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        logger.error(f"Failed to reload meal from Notion: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to reload meal from Notion: {str(e)}")
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
