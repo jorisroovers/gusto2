@@ -20,47 +20,104 @@
     </div>
 
     <div class="content-wrapper">
+      <!-- Notification area for saving/reloading status -->
+      <div v-if="notification" class="notification" :class="notificationType">
+        {{ notification }}
+      </div>
+
       <div class="main-content">
-        <!-- Notification area for saving/reloading status -->
-        <div v-if="notification" class="notification" :class="notificationType">
-          {{ notification }}
-        </div>
         <div v-if="loading" class="loading">Loading meals...</div>
         <div v-else-if="error" class="error">{{ error }}</div>
         <div v-else-if="meals.length === 0" class="no-meals">No meals found</div>
         <div v-else class="meal-display">
           <!-- Day view content -->
-          <div class="day-view">
-            <!-- Meal information first with fixed height -->
-            <div class="meal-info">
-              <div v-if="!editMode">
-                <div v-if="currentMeal.Name" class="meal-name">
-                  <h3>{{ currentMeal.Name }}</h3>
+          <div class="meal-browser">
+            <!-- Navigation controls at the top -->
+            <div class="meal-navigation">
+              <div class="nav-header">
+                <button 
+                  @click="previousMeal" 
+                  :disabled="currentIndex <= 0 || editMode"
+                  class="nav-button"
+                >
+                  <span class="nav-icon">←</span>
+                  <span class="nav-text">Previous</span>
+                </button>
+                
+                <div class="meal-date-container">
+                  <p v-if="currentMeal.Date" class="date-display">{{ formatDate(currentMeal.Date) }}</p>
                   <span v-if="isCurrentMealChanged" class="changed-indicator" title="This meal has unsaved changes">*</span>
-                  <div class="action-buttons">
-                    <button v-if="!showUndoConfirmation" @click="showUndoConfirmation = true" class="undo-button" title="Reload from Notion">↺</button>
-                    <div v-else class="undo-confirmation">
-                      <span>Reload from Notion?</span>
-                      <button @click="confirmUndo" class="confirm-yes">Yes</button>
-                      <button @click="showUndoConfirmation = false" class="confirm-no">No</button>
-                    </div>
-                    <button v-if="!showDeleteConfirmation" @click="showDeleteConfirmation = true" class="delete-button" title="Remove meal">×</button>
-                    <div v-else class="delete-confirmation">
-                      <span>Delete?</span>
-                      <button @click="confirmDelete" class="confirm-yes">Yes</button>
-                      <button @click="showDeleteConfirmation = false" class="confirm-no">No</button>
-                    </div>
-                  </div>
+                  <button @click="selectTodaysMeal" class="today-button" :disabled="editMode">Today</button>
                 </div>
-                <div v-else class="no-meal-planned">
-                  <h3>No meal planned</h3>
-                  <span v-if="isCurrentMealChanged" class="changed-indicator" title="This meal has unsaved changes">*</span>
-                  <div class="action-buttons">
-                    <button v-if="!showUndoConfirmation" @click="showUndoConfirmation = true" class="undo-button" title="Reload from Notion">↺</button>
-                    <div v-else class="undo-confirmation">
-                      <span>Reload from Notion?</span>
-                      <button @click="confirmUndo" class="confirm-yes">Yes</button>
-                      <button @click="showUndoConfirmation = false" class="confirm-no">No</button>
+
+                <button 
+                  @click="nextMeal" 
+                  :disabled="currentIndex >= meals.length - 1 || editMode"
+                  class="nav-button"
+                >
+                  <span class="nav-text">Next</span>
+                  <span class="nav-icon">→</span>
+                </button>
+              </div>
+
+              <div class="navigation-actions">
+                <div class="meal-counter">{{ currentIndex + 1 }} of {{ meals.length }}</div>
+
+                <div class="special-nav-buttons">
+                  <button 
+                    @click="findPreviousUnplanned" 
+                    class="unplanned-button"
+                    :disabled="editMode"
+                    title="Find previous day without a planned meal"
+                  >
+                    <span class="nav-icon">←</span> Previous Unplanned
+                  </button>
+                  <button 
+                    @click="findNextUnplanned" 
+                    class="unplanned-button"
+                    :disabled="editMode"
+                    title="Find next day without a planned meal"
+                  >
+                    Next Unplanned <span class="nav-icon">→</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Meal information card -->
+            <div class="meal-card">
+              <div v-if="!editMode" class="meal-card-view">
+                <div class="meal-card-header">
+                  <div v-if="currentMeal.Name" class="meal-title">
+                    <h3>{{ currentMeal.Name }}</h3>
+                  </div>
+                  <div v-else class="meal-title no-meal">
+                    <h3>No meal planned</h3>
+                  </div>
+
+                  <div class="meal-actions">
+                    <button v-if="!editMode" @click="startEdit" class="edit-button" title="Edit this meal">
+                      <span class="edit-icon">✎</span>
+                      <span class="edit-text">Edit</span>
+                    </button>
+                    
+                    <div class="action-buttons">
+                      <button v-if="!showUndoConfirmation" @click="showUndoConfirmation = true" class="undo-button" title="Reload from Notion">↺</button>
+                      <div v-else class="undo-confirmation">
+                        <span>Reload from Notion?</span>
+                        <button @click="confirmUndo" class="confirm-yes">Yes</button>
+                        <button @click="showUndoConfirmation = false" class="confirm-no">No</button>
+                      </div>
+                      
+                      <button v-if="currentMeal.Name && !showDeleteConfirmation" 
+                        @click="showDeleteConfirmation = true" 
+                        class="delete-button" 
+                        title="Remove meal">×</button>
+                      <div v-if="showDeleteConfirmation" class="delete-confirmation">
+                        <span>Delete?</span>
+                        <button @click="confirmDelete" class="confirm-yes">Yes</button>
+                        <button @click="showDeleteConfirmation = false" class="confirm-no">No</button>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -83,21 +140,17 @@
                     </span>
                   </div>
                 </div>
-                <div class="meal-description">
-                  <p v-if="currentMeal.Notes">{{ currentMeal.Notes }}</p>
-                  <p v-else>&nbsp;</p>
-                </div>
-                <!-- Add suggestion UI - now available for both empty and existing meals -->
-                <div class="suggestion-actions">
-                  <button @click="suggestMeal" class="suggest-button" :disabled="loading">
-                    {{ suggestedMeal ? 'Suggest Another' : 'Suggest Meal' }}
-                  </button>
-                  <div v-if="suggestedMeal" class="suggested-recipe">
-                    <p>Suggested: {{ suggestedMeal.Name }}</p>
-                    <button @click="acceptSuggestion" class="accept-button">Accept</button>
+
+                <div class="meal-card-body">
+                  <div v-if="currentMeal.Notes" class="meal-description">
+                    <p>{{ currentMeal.Notes }}</p>
+                  </div>
+                  <div v-else class="meal-description empty">
+                    <p>No notes</p>
                   </div>
                 </div>
               </div>
+
               <div v-else class="edit-form">
                 <div class="form-group">
                   <label for="mealName">Meal Name:</label>
@@ -123,57 +176,36 @@
                     :suggestions="tagSuggestions"
                   />
                 </div>
+                
+                <div class="edit-actions">
+                  <button @click="saveMeal" class="save-button">Save</button>
+                  <button @click="cancelEdit" class="cancel-button">Cancel</button>
+                </div>
               </div>
             </div>
-            
-            <!-- Edit mode actions -->
-            <div v-if="editMode" class="edit-actions">
-              <button @click="saveMeal" class="save-button">Save</button>
-              <button @click="cancelEdit" class="cancel-button">Cancel</button>
-            </div>
-            
-            <!-- Navigation buttons below meal info with date and counter -->
-            <div class="navigation">
-              <div class="nav-column">
-                <button 
-                  @click="previousMeal" 
-                  :disabled="currentIndex <= 0 || editMode"
-                  class="nav-button"
-                >
-                  &lt; Previous
+
+            <!-- Meal suggestions section -->
+            <div class="meal-suggestions">
+              <div class="suggestion-actions">
+                <button @click="suggestMeal" class="suggest-button" :disabled="loading">
+                  {{ suggestedMeal ? 'Suggest Another Meal' : 'Suggest Meal' }}
                 </button>
-                <button 
-                  @click="findPreviousUnplanned" 
-                  class="unplanned-button"
-                  :disabled="editMode"
-                >
-                  &lt; Previous Unplanned
-                </button>
-              </div>
-              
-              <div class="center-column">
-                <p v-if="currentMeal.Date" class="date-display">{{ formatDate(currentMeal.Date) }}</p>
-                <button @click="selectTodaysMeal" class="today-button" :disabled="editMode">Today</button>
-                <p class="meal-counter">{{ currentIndex + 1 }} of {{ meals.length }}</p>
-                <!-- Edit button -->
-                <button v-if="!editMode" @click="startEdit" class="edit-button">Edit</button>
-              </div>
-              
-              <div class="nav-column">
-                <button 
-                  @click="nextMeal" 
-                  :disabled="currentIndex >= meals.length - 1 || editMode"
-                  class="nav-button"
-                >
-                  Next &gt;
-                </button>
-                <button 
-                  @click="findNextUnplanned" 
-                  class="unplanned-button"
-                  :disabled="editMode"
-                >
-                  Next Unplanned &gt;
-                </button>
+                <div v-if="suggestedMeal" class="suggested-recipe">
+                  <div class="suggested-meal-info">
+                    <h4>Suggested:</h4>
+                    <p>{{ suggestedMeal.Name }}</p>
+                    <div v-if="suggestedMeal.Tags" class="suggested-tags">
+                      <span v-for="tag in suggestedMeal.Tags.split(',')" 
+                            :key="tag.trim()" 
+                            class="suggested-tag"
+                            :data-tag="tag.trim().toLowerCase()"
+                      >
+                        {{ tag.trim() }}
+                      </span>
+                    </div>
+                  </div>
+                  <button @click="acceptSuggestion" class="accept-button">Accept</button>
+                </div>
               </div>
             </div>
             
@@ -186,7 +218,7 @@
             />
           </div>
 
-          <!-- Calendar picker moved below the meal display -->
+          <!-- Calendar picker - this stays the same as requested -->
           <div class="calendar-container">
             <calendar-picker 
               v-if="!loading && !error" 
@@ -828,49 +860,246 @@ export default {
   gap: 2rem;
 }
 
-.day-view {
+.meal-browser {
   flex: 1;
   min-width: 0; /* Prevent flex items from overflowing */
 }
 
-.meal-info {
-  width: 100%;
-  max-width: 800px;
-  margin: 0 auto;
+/* Improve loading/error state styling */
+.loading, .error, .no-meals {
+  text-align: center;
+  padding: 2rem;
   background: white;
-  padding: 20px;
   border-radius: 8px;
-  margin-bottom: 20px;
-  min-height: 200px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 
-.meal-name {
+.loading {
+  color: #3498db;
+}
+
+.error {
+  color: #e74c3c;
+}
+
+.no-meals {
+  color: #7f8c8d;
+}
+
+/* Improve navigation controls */
+.meal-navigation {
+  width: 100%;
+  max-width: 800px;
+  margin: 0 auto 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  padding: 15px;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.nav-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.nav-button {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  background: white;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  min-width: 110px;
+  justify-content: center;
+}
+
+.nav-button:hover:not(:disabled) {
+  background-color: #f5f5f5;
+  border-color: #bbb;
+}
+
+.nav-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.nav-icon {
+  font-size: 1.2em;
+  line-height: 1;
+}
+
+.meal-date-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  position: relative;
+  padding: 0 10px;
+}
+
+.date-display {
+  font-size: 1.2em;
+  font-weight: 600;
+  color: #2c3e50;
+  margin: 0;
+}
+
+.changed-indicator {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  color: #e74c3c;
+  font-weight: bold;
+  font-size: 1.2em;
+}
+
+.today-button {
+  background-color: #3498db;
+  color: white;
+  border: none;
+  padding: 4px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.3s;
+  font-size: 0.85em;
+}
+
+.today-button:hover:not(:disabled) {
+  background-color: #2980b9;
+}
+
+.today-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.navigation-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.meal-counter {
+  color: #666;
+  font-size: 0.9em;
+  text-align: center;
+}
+
+.special-nav-buttons {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.unplanned-button {
+  flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
-  position: relative;
-  margin-bottom: 15px;
+  gap: 5px;
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  background: white;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-size: 0.85em;
 }
 
-.meal-name h3 {
+.unplanned-button:hover:not(:disabled) {
+  background-color: #f5f5f5;
+  border-color: #bbb;
+}
+
+.unplanned-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Meal Card Styles */
+.meal-card {
+  width: 100%;
+  max-width: 800px;
+  margin: 0 auto 20px;
+  background: white;
+  padding: 20px;
+  border-radius: 8px;
+  min-height: 200px;
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.1);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.meal-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+}
+
+.meal-card-view {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.meal-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 15px;
+}
+
+.meal-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.meal-title h3 {
   margin: 0;
   font-size: 1.5em;
   color: #2c3e50;
 }
 
-.changed-indicator {
-  color: #e74c3c;
-  margin-left: 8px;
-  font-weight: bold;
+.meal-title.no-meal h3 {
+  color: #95a5a6;
+  font-style: italic;
+}
+
+.meal-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.edit-button {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background-color: #f39c12;
+  color: white;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+.edit-button:hover {
+  background-color: #d68910;
+}
+
+.edit-icon {
   font-size: 1.2em;
 }
 
 .action-buttons {
-  position: absolute;
-  right: 0;
-  top: 50%;
-  transform: translateY(-50%);
   display: flex;
   gap: 8px;
 }
@@ -882,12 +1111,21 @@ export default {
   font-size: 1.5em;
   cursor: pointer;
   padding: 0 8px;
+  transition: transform 0.2s ease;
+}
+
+.undo-button:hover {
+  transform: scale(1.1);
+  color: #2980b9;
 }
 
 .undo-confirmation {
   display: flex;
   align-items: center;
   gap: 8px;
+  background-color: rgba(52, 152, 219, 0.1);
+  padding: 4px 8px;
+  border-radius: 4px;
 }
 
 .confirm-yes, .confirm-no {
@@ -895,6 +1133,7 @@ export default {
   border-radius: 4px;
   border: 1px solid;
   cursor: pointer;
+  font-size: 0.85em;
 }
 
 .confirm-yes {
@@ -909,13 +1148,6 @@ export default {
   border-color: #7f8c8d;
 }
 
-.delete-container {
-  position: absolute;
-  right: 0;
-  top: 50%;
-  transform: translateY(-50%);
-}
-
 .delete-button {
   background: none;
   border: none;
@@ -923,92 +1155,68 @@ export default {
   font-size: 1.5em;
   cursor: pointer;
   padding: 0 8px;
+  transition: transform 0.2s ease;
+}
+
+.delete-button:hover {
+  transform: scale(1.1);
+  color: #c0392b;
 }
 
 .delete-confirmation {
   display: flex;
   align-items: center;
   gap: 8px;
-}
-
-.confirm-yes, .confirm-no {
+  background-color: rgba(231, 76, 60, 0.1);
   padding: 4px 8px;
   border-radius: 4px;
-  border: 1px solid;
-  cursor: pointer;
 }
 
-.confirm-yes {
-  background-color: #e74c3c;
-  color: white;
-  border-color: #c0392b;
-}
-
-.confirm-no {
-  background-color: #95a5a6;
-  color: white;
-  border-color: #7f8c8d;
+.meal-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 5px;
 }
 
 .meal-description {
-  margin: 15px 0;
-  min-height: 50px;
-}
-
-.meal-description p {
   margin: 0;
   color: #666;
-  line-height: 1.4;
+  line-height: 1.5;
+  min-height: 30px;
 }
 
-.suggestion-actions {
-  margin-top: 15px;
+.meal-description.empty {
+  color: #95a5a6;
+  font-style: italic;
+}
+
+/* Tags styling */
+.meal-tags {
   display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0.75rem 0;
 }
 
-.suggest-button {
-  background-color: #3498db;
-  color: white;
-  border: none;
-  padding: 8px 16px;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: background-color 0.3s;
-}
-
-.suggest-button:hover:not(:disabled) {
-  background-color: #2980b9;
-}
-
-.suggest-button:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.suggested-recipe {
+.tags-container {
   display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  width: 100%;
+}
+
+.tag {
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
+  padding: 0.25rem 0.75rem;
+  border-radius: 16px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.1);
 }
 
-.accept-button {
-  background-color: #2ecc71;
-  color: white;
-  border: none;
-  padding: 6px 12px;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: background-color 0.3s;
-}
-
-.accept-button:hover {
-  background-color: #27ae60;
-}
-
+/* Edit Form */
 .edit-form {
   display: flex;
   flex-direction: column;
@@ -1029,17 +1237,25 @@ export default {
 
 .form-group input,
 .form-group textarea {
-  padding: 8px;
+  padding: 10px;
   border: 1px solid #ddd;
   border-radius: 4px;
   font-size: 14px;
+  transition: border 0.3s ease, box-shadow 0.3s ease;
+}
+
+.form-group input:focus,
+.form-group textarea:focus {
+  outline: none;
+  border-color: #3498db;
+  box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
 }
 
 .edit-actions {
   display: flex;
   gap: 10px;
   justify-content: center;
-  margin-bottom: 20px;
+  margin-top: 10px;
 }
 
 .save-button,
@@ -1048,6 +1264,8 @@ export default {
   border-radius: 4px;
   cursor: pointer;
   border: 1px solid;
+  font-weight: 500;
+  transition: all 0.3s ease;
 }
 
 .save-button {
@@ -1056,130 +1274,125 @@ export default {
   border-color: #27ae60;
 }
 
+.save-button:hover {
+  background-color: #27ae60;
+}
+
 .cancel-button {
   background-color: #e74c3c;
   color: white;
   border-color: #c0392b;
 }
 
-.navigation {
+.cancel-button:hover {
+  background-color: #c0392b;
+}
+
+/* Meal suggestions section */
+.meal-suggestions {
   width: 100%;
   max-width: 800px;
   margin: 0 auto 20px;
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
-  gap: 15px;
-  align-items: center;
-  margin-bottom: 20px;
-  padding: 15px;
   background: white;
+  padding: 20px;
   border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.1);
 }
 
-.nav-column {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.nav-button,
-.unplanned-button {
-  width: fit-content;
-  min-width: 100px;
-  max-width: 200px;
-  padding: 8px 12px;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  background: white;
-  cursor: pointer;
-  transition: all 0.3s ease;
-}
-
-.nav-button:hover:not(:disabled),
-.unplanned-button:hover:not(:disabled) {
-  background-color: #f5f5f5;
-}
-
-.nav-button:disabled,
-.unplanned-button:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.center-column {
+.suggestion-actions {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: 15px;
 }
 
-.date-display {
-  font-size: 1.2em;
-  font-weight: 500;
-  color: #2c3e50;
-  margin: 0;
-}
-
-.today-button {
+.suggest-button {
   background-color: #3498db;
   color: white;
   border: none;
-  padding: 6px 12px;
+  padding: 10px 20px;
   border-radius: 4px;
   cursor: pointer;
   transition: background-color 0.3s;
+  font-weight: 500;
+  min-width: 200px;
 }
 
-.today-button:hover:not(:disabled) {
+.suggest-button:hover:not(:disabled) {
   background-color: #2980b9;
 }
 
-.today-button:disabled {
+.suggest-button:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }
 
-.meal-counter {
-  color: #666;
-  margin: 0;
-  font-size: 0.9em;
+.suggested-recipe {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 15px;
+  background-color: #f8f9fa;
+  padding: 15px;
+  border-radius: 8px;
+  width: 100%;
+  max-width: 500px;
 }
 
-.edit-button {
-  background-color: #f39c12;
+.suggested-meal-info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: center;
+}
+
+.suggested-meal-info h4 {
+  margin: 0;
+  font-size: 1.1em;
+  color: #2c3e50;
+}
+
+.suggested-meal-info p {
+  margin: 0;
+  font-size: 1.2em;
+  font-weight: 500;
+  color: #34495e;
+}
+
+.suggested-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: center;
+  margin-top: 5px;
+}
+
+.suggested-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.75rem;
+  border-radius: 16px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+}
+
+.accept-button {
+  background-color: #2ecc71;
   color: white;
   border: none;
-  padding: 6px 12px;
+  padding: 8px 16px;
   border-radius: 4px;
   cursor: pointer;
   transition: background-color 0.3s;
+  font-weight: 500;
+  min-width: 120px;
 }
 
-.edit-button:hover {
-  background-color: #d68910;
-}
-
-.no-meal-planned {
-  text-align: center;
-  color: #666;
-  margin: 20px 0;
-  position: relative;
-}
-
-.no-meal-planned h3 {
-  margin: 0;
-  color: #95a5a6;
-}
-
-.calendar-container {
-  width: 100%;
-}
-
-.calendar-section {
-  width: 100%;
-  max-width: 400px;
-  margin: 0 auto;
+.accept-button:hover {
+  background-color: #27ae60;
 }
 
 /* Add styles for the meal rules section */
@@ -1191,11 +1404,13 @@ export default {
 
 /* Notification style */
 .notification {
-  padding: 10px 15px;
-  margin-bottom: 15px;
+  padding: 12px 20px;
+  margin-bottom: 20px;
   border-radius: 4px;
   color: white;
   text-align: center;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  font-weight: 500;
 }
 
 .notification.success {
@@ -1214,112 +1429,110 @@ export default {
   background-color: #f39c12;
 }
 
-/* Add styles for the meal tags display */
-.meal-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  margin: 0.5rem 0;
-}
-
-.tag {
-  display: inline-flex;
-  align-items: center;
-  padding: 0.25rem 0.75rem;
-  border-radius: 12px;
-  font-size: 0.75rem;
-  font-weight: 500;
-}
-
+/* Tag color styles */
 /* Diet tags */
-.tag[data-tag*="vegetarisch"], .tag[data-tag*="vegan"] {
+.tag[data-tag*="vegetarisch"], .tag[data-tag*="vegan"], .suggested-tag[data-tag*="vegetarisch"], .suggested-tag[data-tag*="vegan"] {
   background-color: #e8f5e9;
   color: #2e7d32;
 }
 
-.tag[data-tag*="glutten-free"], .tag[data-tag*="low fodmap"] {
+.tag[data-tag*="glutten-free"], .tag[data-tag*="low fodmap"], .suggested-tag[data-tag*="glutten-free"], .suggested-tag[data-tag*="low fodmap"] {
   background-color: #f3e5f5;
   color: #7b1fa2;
 }
 
 /* Protein tags */
-.tag[data-tag*="fish"], .tag[data-tag*="zalm"], .tag[data-tag*="tonijn"] {
+.tag[data-tag*="fish"], .tag[data-tag*="zalm"], .tag[data-tag*="tonijn"], 
+.suggested-tag[data-tag*="fish"], .suggested-tag[data-tag*="zalm"], .suggested-tag[data-tag*="tonijn"] {
   background-color: #e3f2fd;
   color: #1565c0;
 }
 
-.tag[data-tag*="meat"], .tag[data-tag*="chicken"], .tag[data-tag*="beef"], .tag[data-tag*="kip"], .tag[data-tag*="gehakt"], .tag[data-tag*="varken"], .tag[data-tag*="wild"] {
+.tag[data-tag*="meat"], .tag[data-tag*="chicken"], .tag[data-tag*="beef"], .tag[data-tag*="kip"], .tag[data-tag*="gehakt"], .tag[data-tag*="varken"], .tag[data-tag*="wild"],
+.suggested-tag[data-tag*="meat"], .suggested-tag[data-tag*="chicken"], .suggested-tag[data-tag*="beef"], .suggested-tag[data-tag*="kip"], .suggested-tag[data-tag*="gehakt"], .suggested-tag[data-tag*="varken"], .suggested-tag[data-tag*="wild"] {
   background-color: #fce4ec;
   color: #c2185b;
 }
 
 /* Cuisine tags */
-.tag[data-tag*="asian"], .tag[data-tag*="chinese"], .tag[data-tag*="thai"], .tag[data-tag*="indian"] {
+.tag[data-tag*="asian"], .tag[data-tag*="chinese"], .tag[data-tag*="thai"], .tag[data-tag*="indian"],
+.suggested-tag[data-tag*="asian"], .suggested-tag[data-tag*="chinese"], .suggested-tag[data-tag*="thai"], .suggested-tag[data-tag*="indian"] {
   background-color: #fff3e0;
   color: #e65100;
 }
 
-.tag[data-tag*="italian"], .tag[data-tag*="italiaans"], .tag[data-tag*="mediteraans"] {
+.tag[data-tag*="italian"], .tag[data-tag*="italiaans"], .tag[data-tag*="mediteraans"],
+.suggested-tag[data-tag*="italian"], .suggested-tag[data-tag*="italiaans"], .suggested-tag[data-tag*="mediteraans"] {
   background-color: #e8eaf6;
   color: #303f9f;
 }
 
-.tag[data-tag*="mexican"], .tag[data-tag*="mexicaans"], .tag[data-tag*="spanish"], .tag[data-tag*="spaans"] {
+.tag[data-tag*="mexican"], .tag[data-tag*="mexicaans"], .tag[data-tag*="spanish"], .tag[data-tag*="spaans"],
+.suggested-tag[data-tag*="mexican"], .suggested-tag[data-tag*="mexicaans"], .suggested-tag[data-tag*="spanish"], .suggested-tag[data-tag*="spaans"] {
   background-color: #fff8e1;
   color: #ff6f00;
 }
 
 /* Cooking method tags */
-.tag[data-tag*="bbq"], .tag[data-tag*="airfryer"] {
+.tag[data-tag*="bbq"], .tag[data-tag*="airfryer"],
+.suggested-tag[data-tag*="bbq"], .suggested-tag[data-tag*="airfryer"] {
   background-color: #ffebee;
   color: #c62828;
 }
 
-.tag[data-tag*="lang koken"], .tag[data-tag*="ovenschotel"] {
+.tag[data-tag*="lang koken"], .tag[data-tag*="ovenschotel"],
+.suggested-tag[data-tag*="lang koken"], .suggested-tag[data-tag*="ovenschotel"] {
   background-color: #ede7f6;
   color: #4527a0;
 }
 
-.tag[data-tag*="takeout"], .tag[data-tag*="restaurant"] {
+.tag[data-tag*="takeout"], .tag[data-tag*="restaurant"],
+.suggested-tag[data-tag*="takeout"], .suggested-tag[data-tag*="restaurant"] {
   background-color: #e0f2f1;
   color: #00695c;
 }
 
-.tag[data-tag*="easy"], .tag[data-tag*="quick"] {
+.tag[data-tag*="easy"], .tag[data-tag*="quick"],
+.suggested-tag[data-tag*="easy"], .suggested-tag[data-tag*="quick"] {
   background-color: #e1f5fe;
   color: #0277bd;
 }
 
 /* Carb/starch tags */
-.tag[data-tag*="pasta"], .tag[data-tag*="noodles"], .tag[data-tag*="rijst"], .tag[data-tag*="rice"] {
+.tag[data-tag*="pasta"], .tag[data-tag*="noodles"], .tag[data-tag*="rijst"], .tag[data-tag*="rice"],
+.suggested-tag[data-tag*="pasta"], .suggested-tag[data-tag*="noodles"], .suggested-tag[data-tag*="rijst"], .suggested-tag[data-tag*="rice"] {
   background-color: #f9fbe7;
   color: #827717;
 }
 
-.tag[data-tag*="aardappel"], .tag[data-tag*="potato"], .tag[data-tag*="puree"], .tag[data-tag*="friet"] {
+.tag[data-tag*="aardappel"], .tag[data-tag*="potato"], .tag[data-tag*="puree"], .tag[data-tag*="friet"],
+.suggested-tag[data-tag*="aardappel"], .suggested-tag[data-tag*="potato"], .suggested-tag[data-tag*="puree"], .suggested-tag[data-tag*="friet"] {
   background-color: #fff3e0;
   color: #bf360c;
 }
 
-.tag[data-tag*="brood"] {
+.tag[data-tag*="brood"],
+.suggested-tag[data-tag*="brood"] {
   background-color: #efebe9;
   color: #4e342e;
 }
 
 /* Vegetable tags */
-.tag[data-tag*="brocolli"], .tag[data-tag*="spinazie"], .tag[data-tag*="bloemkool"], .tag[data-tag*="courgette"], .tag[data-tag*="pompoen"], .tag[data-tag*="salade"] {
+.tag[data-tag*="brocolli"], .tag[data-tag*="spinazie"], .tag[data-tag*="bloemkool"], .tag[data-tag*="courgette"], .tag[data-tag*="pompoen"], .tag[data-tag*="salade"],
+.suggested-tag[data-tag*="brocolli"], .suggested-tag[data-tag*="spinazie"], .suggested-tag[data-tag*="bloemkool"], .suggested-tag[data-tag*="courgette"], .suggested-tag[data-tag*="pompoen"], .suggested-tag[data-tag*="salade"] {
   background-color: #f1f8e9;
   color: #558b2f;
 }
 
 /* Other characteristics */
-.tag[data-tag*="vettig"], .tag[data-tag*="comfort"] {
+.tag[data-tag*="vettig"], .tag[data-tag*="comfort"],
+.suggested-tag[data-tag*="vettig"], .suggested-tag[data-tag*="comfort"] {
   background-color: #fafafa;
   color: #424242;
 }
 
 /* Default style if no specific category matches */
-.tag {
+.tag, .suggested-tag {
   background-color: #f5f5f5;
   color: #424242;
 }
@@ -1355,6 +1568,17 @@ export default {
   font-size: 14px;
 }
 
+/* Calendar section - keeping this the same as requested */
+.calendar-container {
+  width: 100%;
+}
+
+.calendar-section {
+  width: 100%;
+  max-width: 400px;
+  margin: 0 auto;
+}
+
 /* Desktop layout */
 @media (min-width: 1024px) {
   .meal-display {
@@ -1362,7 +1586,7 @@ export default {
     align-items: flex-start;
   }
 
-  .day-view {
+  .meal-browser {
     flex: 1;
     margin-right: 2rem;
     max-width: 800px;
@@ -1376,6 +1600,53 @@ export default {
 
   .calendar-section {
     margin: 0;
+  }
+  
+  /* Special nav buttons in a row on desktop */
+  .special-nav-buttons {
+    flex-direction: row;
+  }
+}
+
+/* Tablet layout */
+@media (max-width: 1023px) and (min-width: 768px) {
+  .meal-navigation {
+    max-width: 90%;
+  }
+  
+  .meal-card,
+  .meal-suggestions,
+  .meal-rules-section {
+    max-width: 90%;
+  }
+}
+
+/* Mobile layout improvements */
+@media (max-width: 767px) {
+  .nav-header {
+    flex-direction: column;
+    gap: 15px;
+  }
+  
+  .meal-date-container {
+    order: -1;
+    margin-bottom: 10px;
+  }
+  
+  .special-nav-buttons {
+    flex-direction: column;
+  }
+  
+  .meal-card-header {
+    flex-direction: column;
+    gap: 10px;
+    align-items: center;
+  }
+  
+  .meal-actions {
+    width: 100%;
+    justify-content: center;
+    margin-top: 10px;
   }
 }
 </style>
