@@ -51,7 +51,19 @@
           </div>
           
           <div class="ingredients-section">
-            <h4>Ingredients:</h4>
+            <div class="ingredients-header">
+              <h4>Ingredients:</h4>
+              <button 
+                v-if="currentIngredients.length > 0" 
+                @click="reloadIngredients"
+                class="btn-reload-ingredients"
+                :disabled="ingredientsLoading"
+                title="Check AI again for ingredients"
+              >
+                <span v-if="!ingredientsLoading">Reload</span>
+                <span v-else>Loading...</span>
+              </button>
+            </div>
             <!-- Ingredients with loading state -->
             <div v-if="ingredientsLoading" class="ingredients-loading">
               <div class="loading-spinner"></div>
@@ -323,6 +335,34 @@ export default {
     
     openProductUrl(url) {
       window.open(url, '_blank');
+    },
+
+    async reloadIngredients() {
+      if (!this.selectedMeal || !this.selectedMeal.Name) return;
+      
+      const mealName = this.selectedMeal.Name;
+      this.ingredientsLoading = true;
+      
+      try {
+        // Use the regenerate-ingredients endpoint to force AI to generate fresh ingredients
+        const response = await axios.get(`/api/meal/${encodeURIComponent(mealName)}/regenerate-ingredients`);
+        if (response.data && response.data.status === 'success') {
+          // Store ingredients for this meal
+          this.mealIngredients = {
+            ...this.mealIngredients,
+            [mealName]: response.data.ingredients
+          };
+          
+          // Save to localStorage for persistence
+          this.saveIngredientsToLocalStorage();
+        }
+      } catch (error) {
+        console.error('Error regenerating ingredients:', error);
+        // Set empty array for this meal to indicate we tried to fetch
+        this.mealIngredients[mealName] = [];
+      } finally {
+        this.ingredientsLoading = false;
+      }
     }
   },
   async mounted() {
@@ -739,5 +779,32 @@ export default {
   .products-container {
     grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
   }
+}
+
+.btn-reload-ingredients {
+  background-color: #3498db;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 8px 16px;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  margin-left: 10px;
+}
+
+.btn-reload-ingredients:disabled {
+  background-color: #b0c4de;
+  cursor: not-allowed;
+}
+
+.btn-reload-ingredients:hover:not(:disabled) {
+  background-color: #2980b9;
+}
+
+.ingredients-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 </style>

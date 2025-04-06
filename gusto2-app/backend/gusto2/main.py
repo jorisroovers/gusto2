@@ -1158,6 +1158,86 @@ def extract_product_data(product):
         logger.warning(f"Error extracting product data: {str(e)}")
         return None
 
+@app.get("/api/meal/{meal_name}/regenerate-ingredients")
+async def regenerate_meal_ingredients(meal_name: str):
+    """Force the regeneration of ingredients for a specific meal using OpenAI API, ignoring any cached values."""
+    if not OPENAI_API_KEY:
+        raise HTTPException(status_code=500, detail="OpenAI API key not configured")
+    
+    try:
+        logger.info(f"Regenerating ingredients for {meal_name} using OpenAI")
+        
+        # Create prompt for OpenAI
+        system_prompt = """You are a cooking expert that provides ingredients for recipes.
+        You must respond with a raw JSON array of ingredients (no markdown, no backticks, no formatting).
+        The response must be a list of strings, each representing an ingredient.
+        
+        Follow these rules:
+        1. Only include ingredients available at the Dutch Albert Heijn supermarket
+        2. Do not include common base ingredients like salt, pepper, oil, etc.
+        3. Do not include amounts, only the ingredients themselves
+        4. Keep the list concise and focused on main ingredients
+        5. Return ONLY a JSON array of strings, no other text
+        """
+        
+        user_prompt = f"""Provide a list of ingredients for the recipe: {meal_name}
+        
+        Remember:
+        - Ingredients should be available at Albert Heijn in the Netherlands
+        - Do NOT include common ingredients like salt, pepper, oil
+        - Do NOT include amounts
+        - ONLY return a JSON array of strings
+        """
+
+        # Call OpenAI API
+        response = await openai_client.chat.completions.create(
+            model=OPENAI_MODEL,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            temperature=0.7,
+            response_format={ "type": "json" },
+            max_tokens=500
+        )
+        
+        # Extract and clean up the response
+        content = response.choices[0].message.content.strip()
+        content = content.replace('```json', '').replace('```', '').strip()
+        
+        # Parse the ingredients list
+        ingredients = json.loads(content)
+        
+        # Update in database for future use
+        with database.SessionLocal() as db:
+            # Check if we already have a record
+            existing = db.query(database.IngredientModel).filter(
+                database.IngredientModel.meal_name == meal_name
+            ).first()
+            
+            if existing:
+                # Update existing record
+                existing.ingredients_json = json.dumps(ingredients)
+                existing.last_updated = datetime.now()
+            else:
+                # Create new record
+                new_ingredient = database.IngredientModel(
+                    meal_name=meal_name,
+                    ingredients_json=json.dumps(ingredients)
+                )
+                db.add(new_ingredient)
+            
+            db.commit()
+        
+        return {
+            "status": "success",
+            "ingredients": ingredients
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to regenerate ingredients for {meal_name}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to regenerate ingredients: {str(e)}")
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
