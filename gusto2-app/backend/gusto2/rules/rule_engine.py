@@ -386,6 +386,110 @@ class SpecificDayRequirementRule(Rule):
         return days[self.day_of_week]
 
 
+class MultiTagWeeklyRequirementRule(WeeklyRequirementRule):
+    """Require at least one of multiple tags to appear a minimum number of times in a week."""
+    
+    def __init__(self, name: str, description: str, tags: List[str], occurrences: int):
+        # Use the first tag for the base class, but we'll override the validation
+        super().__init__(name=name, description=description, tag=tags[0], occurrences=occurrences)
+        self.tags = [t.lower() for t in tags]  # Store all tags in lowercase
+    
+    def validate(self, meals_df: pd.DataFrame, date: Optional[datetime] = None) -> Tuple[bool, str]:
+        """Check if any of the tags appears the required number of times in the week."""
+        if meals_df.empty:
+            return False, f"No meals to validate for {' or '.join(self.tags)} requirement"
+        
+        # Ensure the Date column is in datetime format
+        meals_df = meals_df.copy()
+        meals_df['Date'] = pd.to_datetime(meals_df['Date'])
+        
+        # If no date specified, group by ISO week and check each week
+        if date is None:
+            # Group by ISO week (Monday-based)
+            meals_df['Week'] = meals_df['Date'].dt.isocalendar().week
+            meals_df['Year'] = meals_df['Date'].dt.isocalendar().year
+            
+            # Each (year, week) tuple is a complete Monday-Sunday week
+            weeks = meals_df.groupby(['Year', 'Week'])
+            
+            for (year, week), week_meals in weeks:
+                # Count meals with any of the required tags
+                tag_count = 0
+                for _, row in week_meals.iterrows():
+                    if pd.notna(row['Tags']):
+                        meal_tags = [t.strip().lower() for t in row['Tags'].split(',')]
+                        if any(tag in meal_tags for tag in self.tags):
+                            tag_count += 1
+                
+                if tag_count < self.occurrences:
+                    # Get Monday's date for this week
+                    monday_date = week_meals['Date'].min().strftime('%Y-%m-%d')
+                    return False, f"Week starting {monday_date} has only {tag_count} meals with tags '{' or '.join(self.tags)}', but {self.occurrences} are required"
+            
+            return True, f"All weeks have at least {self.occurrences} meals with tags '{' or '.join(self.tags)}'"
+        else:
+            # For a specific date, check just that ISO week (Monday-Sunday)
+            iso_calendar = date.isocalendar()
+            week_meals = meals_df[meals_df['Date'].dt.isocalendar().week == iso_calendar.week]
+            
+            # Count meals with any of the required tags
+            tag_count = 0
+            for _, row in week_meals.iterrows():
+                if pd.notna(row['Tags']):
+                    meal_tags = [t.strip().lower() for t in row['Tags'].split(',')]
+                    if any(tag in meal_tags for tag in self.tags):
+                        tag_count += 1
+            
+            if tag_count < self.occurrences:
+                # Get Monday's date for this week
+                week_start = date - timedelta(days=date.weekday())
+                return False, f"Week starting {week_start.strftime('%Y-%m-%d')} has only {tag_count} meals with tags '{' or '.join(self.tags)}', but {self.occurrences} are required"
+            
+            return True, f"Week has at least {self.occurrences} meals with tags '{' or '.join(self.tags)}'"
+    
+    def can_add_meal(self, meal_name: str, meal_tags: List[str], date: datetime, 
+                     meals_df: pd.DataFrame) -> Tuple[bool, str]:
+        """
+        Check how adding this meal affects the weekly requirement.
+        Since this is a requirement not a constraint, it's always allowed to add a meal,
+        but we return information about whether it helps meet the requirement.
+        """
+        # This is a requirement, not a constraint, so meals can always be added
+        # But we'll check if it helps meet the requirement
+        
+        meal_tags = [t.lower() for t in meal_tags] if meal_tags else []
+        
+        if not meal_tags:
+            return True, f"Meal doesn't have any of the required tags ({' or '.join(self.tags)}), so doesn't help meet the weekly requirement"
+        
+        has_required_tag = any(tag in meal_tags for tag in self.tags)
+        
+        if not has_required_tag:
+            return True, f"Meal doesn't have any of the required tags ({' or '.join(self.tags)}), so doesn't help meet the weekly requirement"
+        
+        # Ensure the Date column is in datetime format
+        meals_df = meals_df.copy()
+        meals_df['Date'] = pd.to_datetime(meals_df['Date'])
+        
+        # Get the ISO week for this date (Monday-based)
+        iso_calendar = date.isocalendar()
+        week_meals = meals_df[meals_df['Date'].dt.isocalendar().week == iso_calendar.week]
+        
+        # Count existing meals with any of the required tags
+        tag_count = 0
+        for _, row in week_meals.iterrows():
+            if pd.notna(row['Tags']):
+                week_meal_tags = [t.strip().lower() for t in row['Tags'].split(',')]
+                if any(tag in week_meal_tags for tag in self.tags):
+                    tag_count += 1
+        
+        if tag_count >= self.occurrences:
+            return True, f"Weekly requirement for {' or '.join(self.tags)} ({self.occurrences} meals) already met ({tag_count} meals)"
+        else:
+            # This meal would help meet the requirement
+            return True, f"Adding this meal helps meet the weekly requirement for {' or '.join(self.tags)} ({tag_count + 1}/{self.occurrences})"
+
+
 class RuleEngine:
     """Engine to manage and evaluate mealplan rules."""
     
@@ -553,10 +657,10 @@ default_rule_engine.add_rule(
 )
 
 default_rule_engine.add_rule(
-    WeeklyRequirementRule(
-        name="Weekly rice",
-        description="Have rice at least once a week",
-        tag="rice",
+    MultiTagWeeklyRequirementRule(
+        name="Weekly rice/asian",
+        description="Have rice or asian food at least once a week",
+        tags=["rice", "asian"],
         occurrences=1
     )
 )
