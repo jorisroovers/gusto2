@@ -99,6 +99,12 @@ export default {
       // Filter by tags
       if (this.selectedTags.length) {
         filtered = filtered.filter(recipe => {
+          // Handle special "NO_TAGS" filter
+          if (this.selectedTags.includes('NO_TAGS')) {
+            return !recipe.Tags || recipe.Tags.trim() === '';
+          }
+          
+          // Regular tag filtering
           if (!recipe.Tags) return false;
           const recipeTags = recipe.Tags.split(',').map(t => t.trim().toLowerCase());
           return this.selectedTags.every(tag => recipeTags.includes(tag.toLowerCase()));

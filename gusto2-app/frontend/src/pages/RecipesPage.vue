@@ -58,6 +58,13 @@
           <h3>Filter by Tags</h3>
           <div class="tags-list">
             <div 
+              class="filter-tag no-tags-filter"
+              :class="{ active: selectedTags.includes('NO_TAGS') }"
+              @click="toggleTag('NO_TAGS')"
+            >
+              No tags
+            </div>
+            <div 
               v-for="tag in availableTags" 
               :key="tag"
               :class="['filter-tag', { active: selectedTags.includes(tag) }]"
@@ -431,6 +438,23 @@ export default {
 .filter-tag.active {
   filter: brightness(0.9);
   font-weight: 500;
+}
+
+/* No tags filter */
+.no-tags-filter {
+  background-color: #eceff1;
+  color: #546e7a;
+  border: 1px dashed #90a4ae;
+  margin-bottom: 1rem;
+}
+
+.no-tags-filter:hover {
+  background-color: #cfd8dc;
+}
+
+.no-tags-filter.active {
+  background-color: #cfd8dc;
+  border-style: solid;
 }
 
 .recipe-actions {
