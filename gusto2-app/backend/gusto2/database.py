@@ -255,6 +255,9 @@ def update_changeset(index, meal):
             if 'Name' in meal and meal['Name'] is not None:
                 db_meal.name = meal['Name']
             if 'Tags' in meal and meal['Tags'] is not None:
+                # Normalize tags to lowercase
+                if meal['Tags']:
+                    meal['Tags'] = ','.join([tag.strip().lower() for tag in meal['Tags'].split(',') if tag.strip()])
                 db_meal.tags = meal['Tags']
             if 'Notes' in meal and meal['Notes'] is not None:
                 db_meal.notes = meal['Notes']
@@ -356,22 +359,39 @@ def populate_recipes_from_meals():
     # Get unique meals with their tags
     unique_meals = meals[['Name', 'Tags']].dropna(subset=['Name']).drop_duplicates()
     
-    # If we already have recipes, only process new ones
-    existing_names = set(existing_recipes['Name'].dropna())
-    new_recipes_count = 0
+    # Create a dictionary of existing recipe names to their rows for faster lookup
+    existing_recipe_dict = {}
+    if not existing_recipes.empty:
+        for _, row in existing_recipes.iterrows():
+            if pd.notna(row.get('Name')):
+                existing_recipe_dict[row.get('Name')] = row
     
-    # Process each new recipe individually
+    # Dictionary to track all recipes that need to be created or updated
+    recipes_to_update = {}
+    
+    # Process each unique meal to either create or update a recipe
     for _, row in unique_meals.iterrows():
         name = row.get('Name')
-        if name and name not in existing_names:
-            # Create a single recipe DataFrame
-            recipe_df = pd.DataFrame({
-                "Name": [name],
-                "Tags": [row.get('Tags')]
-            })
-            if save_recipes(recipe_df):
-                new_recipes_count += 1
-                existing_names.add(name)  # Add to set to avoid duplicates
+        if not name:
+            continue
+            
+        # Get tags and normalize to lowercase
+        tags = row.get('Tags')
+        if pd.notna(tags) and tags:
+            # Split tags, trim whitespace, convert to lowercase, then rejoin
+            tags = ','.join([tag.strip().lower() for tag in tags.split(',') if tag.strip()])
+        
+        # If recipe exists, we'll update it with new tags from meals
+        # If multiple meals have the same name but different tags, the last one will be used
+        recipes_to_update[name] = tags
+    
+    # Convert the tracked recipes to a DataFrame and save
+    if recipes_to_update:
+        recipes_df = pd.DataFrame({
+            "Name": list(recipes_to_update.keys()),
+            "Tags": list(recipes_to_update.values())
+        })
+        save_recipes(recipes_df)
     
     return read_recipes()
 
