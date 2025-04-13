@@ -12,6 +12,9 @@ import random
 from datetime import datetime  # Removed unused timedelta
 from supermarktconnector.ah import AHConnector
 
+# Import application settings
+from gusto2.settings import settings
+
 # Import from our database module
 from gusto2 import database
 
@@ -65,26 +68,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# OpenAI configuration
-OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
-OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4-turbo-preview")
-OPENAI_BASE_URL = os.environ.get("OPENAI_BASE_URL")
-
-# Initialize OpenAI client with optional base_url
-openai_client_kwargs = {"api_key": OPENAI_API_KEY}
-if OPENAI_BASE_URL:
-    openai_client_kwargs["base_url"] = OPENAI_BASE_URL
-openai_client = AsyncOpenAI(**openai_client_kwargs)
+# Initialize OpenAI client using settings
+openai_client = AsyncOpenAI(**settings.get_openai_client_kwargs())
 
 # Utility function for OpenAI API calls with JSON response
 async def call_openai_with_json_response(system_prompt, user_prompt, temperature=0.7, max_tokens=500):
     """Generic function to call OpenAI API and get a JSON response"""
-    if not OPENAI_API_KEY:
+    if not settings.openai_api_key:
         raise HTTPException(status_code=500, detail="OpenAI API key not configured")
     
     try:
         response = await openai_client.chat.completions.create(
-            model=OPENAI_MODEL,
+            model=settings.openai_model,
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
@@ -101,10 +96,6 @@ async def call_openai_with_json_response(system_prompt, user_prompt, temperature
     except Exception as e:
         logger.error(f"Failed to call OpenAI API: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to call OpenAI API: {str(e)}")
-
-# Notion API configuration
-NOTION_API_TOKEN = os.environ.get("NOTION_API_TOKEN")
-NOTION_MEALPLAN_PAGE_ID = os.environ.get("NOTION_MEALPLAN_PAGE_ID")
 
 # Pydantic models for request/response
 class Meal(BaseModel):
@@ -136,23 +127,23 @@ class ProductSearchResult(BaseModel):
 def fetch_from_notion():
     """Fetch meal data from Notion database and save to database"""
     
-    if not NOTION_API_TOKEN or not NOTION_MEALPLAN_PAGE_ID:
+    if not settings.notion_api_token or not settings.notion_mealplan_page_id:
         logger.warning("Notion API token or page ID not provided. Skipping Notion fetch.")
         return False
     
     try:
         # Set up headers for Notion API
         headers = {
-            "Authorization": f"Bearer {NOTION_API_TOKEN}",
+            "Authorization": f"Bearer {settings.notion_api_token}",
             "Content-Type": "application/json",
             "Notion-Version": "2022-06-28"  # Use the current Notion API version
         }
         
         # Query the database using Notion's REST API
-        logger.info(f"Fetching meals from Notion database: {NOTION_MEALPLAN_PAGE_ID}")
+        logger.info(f"Fetching meals from Notion database: {settings.notion_mealplan_page_id}")
         
         # API endpoint for querying a database
-        url = f"https://api.notion.com/v1/databases/{NOTION_MEALPLAN_PAGE_ID}/query"
+        url = f"https://api.notion.com/v1/databases/{settings.notion_mealplan_page_id}/query"
         
         # Collect all pages with pagination
         has_more = True
@@ -274,13 +265,13 @@ def fetch_from_notion():
 
 def save_to_notion(meals_df, changed_indices_set):
     """Save changed meal rows back to Notion"""
-    if not NOTION_API_TOKEN:
+    if not settings.notion_api_token:
         logger.warning("Notion API token not provided. Skipping Notion update.")
         return False
     
     # Set up headers for Notion API
     headers = {
-        "Authorization": f"Bearer {NOTION_API_TOKEN}",
+        "Authorization": f"Bearer {settings.notion_api_token}",
         "Content-Type": "application/json",
         "Notion-Version": "2022-06-28"  # Use the current Notion API version
     }
@@ -752,7 +743,7 @@ async def suggest_meals(suggestion_request: MealSuggestionRequest):
 @app.get("/api/suggest-recipe")
 async def suggest_recipe():
     """Get a recipe suggestion using OpenAI"""
-    if not OPENAI_API_KEY:
+    if not settings.openai_api_key:
         raise HTTPException(status_code=500, detail="OpenAI API key not configured")
     
     try:
@@ -789,7 +780,7 @@ async def suggest_recipe():
         
         # Call OpenAI API
         response = await openai_client.chat.completions.create(
-            model=OPENAI_MODEL,
+            model=settings.openai_model,
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
@@ -859,11 +850,11 @@ async def reload_meal_from_notion(index: int):
             raise HTTPException(status_code=404, detail=f"No Notion page ID found for date {date_str}")
         
         # Set up headers for Notion API
-        if not NOTION_API_TOKEN:
+        if not settings.notion_api_token:
             raise HTTPException(status_code=500, detail="Notion API token not configured")
             
         headers = {
-            "Authorization": f"Bearer {NOTION_API_TOKEN}",
+            "Authorization": f"Bearer {settings.notion_api_token}",
             "Content-Type": "application/json",
             "Notion-Version": "2022-06-28"  # Use the current Notion API version
         }
@@ -943,9 +934,6 @@ async def reload_meal_from_notion(index: int):
 @app.get("/api/meal/{meal_name}/ingredients")
 async def get_meal_ingredients(meal_name: str):
     """Get ingredients for a specific meal using OpenAI API"""
-    if not OPENAI_API_KEY:
-        raise HTTPException(status_code=500, detail="OpenAI API key not configured")
-    
     try:
         # Check if we already have ingredients cached for this meal
         with database.SessionLocal() as db:
@@ -1174,8 +1162,6 @@ def extract_product_data(product):
 @app.get("/api/meal/{meal_name}/regenerate-ingredients")
 async def regenerate_meal_ingredients(meal_name: str):
     """Force the regeneration of ingredients for a specific meal using OpenAI API, ignoring any cached values."""
-    if not OPENAI_API_KEY:
-        raise HTTPException(status_code=500, detail="OpenAI API key not configured")
     
     try:
         logger.info(f"Regenerating ingredients for {meal_name} using OpenAI")
