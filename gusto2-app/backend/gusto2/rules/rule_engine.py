@@ -113,7 +113,10 @@ class NoRepeatInWindowRule(Rule):
                     days_diff = (meal_date - prev_date).days
                     
                     if 0 < days_diff <= self.window_days:
-                        return False, f"'{meal_name}' repeats on {prev_date.strftime('%Y-%m-%d')} and {meal_date.strftime('%Y-%m-%d')}, which is within {days_diff} days (window is {self.window_days} days)"
+                        # Find all occurrences of this meal within the window
+                        all_dates = [d.strftime('%Y-%m-%d') for d in meal_occurrences[meal_name] 
+                                    if 0 <= (meal_date - d).days <= self.window_days]
+                        return False, f"'{meal_name}' repeats on dates: {', '.join(all_dates)}, which includes repeats within {self.window_days} days"
                 
                 # Add this occurrence
                 meal_occurrences[meal_name].append(meal_date)
@@ -131,14 +134,17 @@ class NoRepeatInWindowRule(Rule):
             # Filter to the relevant date range
             window_meals = meals_df[(meals_df['Date'] >= start_date) & (meals_df['Date'] <= end_date)]
             
-            # Count occurrences of each meal in the window
-            meal_counts = window_meals['Name'].value_counts()
+            # Find repeating meals with their dates
+            repeat_details = []
+            for meal_name, count in window_meals['Name'].value_counts().items():
+                if count > 1:
+                    # Get all dates this meal appears on
+                    meal_dates = window_meals[window_meals['Name'] == meal_name]['Date']
+                    formatted_dates = [d.strftime('%Y-%m-%d') for d in meal_dates]
+                    repeat_details.append(f"'{meal_name}' on dates: {', '.join(formatted_dates)}")
             
-            # Check for repeats
-            repeats = meal_counts[meal_counts > 1]
-            if not repeats.empty:
-                repeat_meals = repeats.index.tolist()
-                return False, f"The following meals repeat within the {self.window_days}-day window around {date.strftime('%Y-%m-%d')}: {', '.join(repeat_meals)}"
+            if repeat_details:
+                return False, f"The following meals repeat within the {self.window_days}-day window around {date.strftime('%Y-%m-%d')}: {'; '.join(repeat_details)}"
             
             return True, "No meals repeat within the sliding window around the specified date"
 
