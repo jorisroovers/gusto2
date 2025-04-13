@@ -18,6 +18,7 @@ dependencies = [
     "sqlalchemy",  # Adding SQLAlchemy for database ORM
     "openai>=1.0.0",  # For recipe suggestions
     "supermarktconnector==0.8.1",  # For Albert Heijn product search
+    "ruff==0.11.5",  # For linting and formatting Python code
 ]
 
 [build-system]
@@ -26,3 +27,16 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["gusto2"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "W", "C90"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["gusto2"]
+
+[tool.ruff.lint.flake8-quotes]
+docstring-quotes = "double"

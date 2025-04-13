@@ -14,6 +14,9 @@ deploy:
 dev:
     cd gusto2-app && docker-compose up --build
 
+format:
+    uvx ruff==0.11.5 format gusto2-app/backend
+
 # Task to start the application in production mode
 prod:
     cd gusto2-app && docker-compose -f docker-compose.prod.yml up --build

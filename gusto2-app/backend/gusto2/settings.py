@@ -3,30 +3,34 @@ Application settings module using Pydantic for configuration management.
 This centralizes all environment variables and configuration in one place
 with proper typing and validation.
 """
+
 import os
 from typing import Optional
+
 from pydantic import BaseModel, Field, validator
+
 
 class Settings(BaseModel):
     """Application settings loaded from environment variables"""
-    
+
     # OpenAI Configuration
     openai_api_key: Optional[str] = Field(None, description="OpenAI API key")
     openai_model: str = Field("gpt-4-turbo-preview", description="OpenAI model to use")
     openai_base_url: Optional[str] = Field(None, description="Optional base URL for OpenAI API")
-    
+
     # Notion API Configuration
     notion_api_token: Optional[str] = Field(None, description="Notion API token")
     notion_mealplan_page_id: Optional[str] = Field(None, description="Notion meal plan page ID")
-    
+
     # Application Configuration
     debug: bool = Field(False, description="Debug mode flag")
-    
+
     class Config:
         """Pydantic config"""
+
         case_sensitive = False  # Case-insensitive environment variable names
-        
-    @validator('openai_api_key', 'notion_api_token', pre=True)
+
+    @validator("openai_api_key", "notion_api_token", pre=True)
     def check_api_keys(cls, v, values, **kwargs):
         """Validate API keys are provided when needed"""
         if v == "":
@@ -39,6 +43,7 @@ class Settings(BaseModel):
         if self.openai_base_url:
             kwargs["base_url"] = self.openai_base_url
         return kwargs
+
 
 # Create a global settings instance
 settings = Settings(
