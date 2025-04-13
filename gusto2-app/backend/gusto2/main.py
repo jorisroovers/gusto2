@@ -76,6 +76,32 @@ if OPENAI_BASE_URL:
     openai_client_kwargs["base_url"] = OPENAI_BASE_URL
 openai_client = AsyncOpenAI(**openai_client_kwargs)
 
+# Utility function for OpenAI API calls with JSON response
+async def call_openai_with_json_response(system_prompt, user_prompt, temperature=0.7, max_tokens=500):
+    """Generic function to call OpenAI API and get a JSON response"""
+    if not OPENAI_API_KEY:
+        raise HTTPException(status_code=500, detail="OpenAI API key not configured")
+    
+    try:
+        response = await openai_client.chat.completions.create(
+            model=OPENAI_MODEL,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            temperature=temperature,
+            response_format={"type": "json"},
+            max_tokens=max_tokens
+        )
+        
+        content = response.choices[0].message.content.strip()
+        content = content.replace('```json', '').replace('```', '').strip()
+        
+        return json.loads(content)
+    except Exception as e:
+        logger.error(f"Failed to call OpenAI API: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to call OpenAI API: {str(e)}")
+
 # Notion API configuration
 NOTION_API_TOKEN = os.environ.get("NOTION_API_TOKEN")
 NOTION_MEALPLAN_PAGE_ID = os.environ.get("NOTION_MEALPLAN_PAGE_ID")
@@ -958,24 +984,11 @@ async def get_meal_ingredients(meal_name: str):
 
         logger.info(f"Calling OpenAI API to get ingredients for {meal_name}")
         
-        # Call OpenAI API
-        response = await openai_client.chat.completions.create(
-            model=OPENAI_MODEL,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ],
-            temperature=0.7,
-            response_format={ "type": "json" },
-            max_tokens=500
+        # Call OpenAI API using the utility function
+        ingredients = await call_openai_with_json_response(
+            system_prompt=system_prompt,
+            user_prompt=user_prompt
         )
-        
-        # Extract and clean up the response
-        content = response.choices[0].message.content.strip()
-        content = content.replace('```json', '').replace('```', '').strip()
-        
-        # Parse the ingredients list
-        ingredients = json.loads(content)
         
         # Store in database for future use
         with database.SessionLocal() as db:
@@ -1189,24 +1202,11 @@ async def regenerate_meal_ingredients(meal_name: str):
         - ONLY return a JSON array of strings
         """
 
-        # Call OpenAI API
-        response = await openai_client.chat.completions.create(
-            model=OPENAI_MODEL,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ],
-            temperature=0.7,
-            response_format={ "type": "json" },
-            max_tokens=500
+        # Call OpenAI API using the utility function
+        ingredients = await call_openai_with_json_response(
+            system_prompt=system_prompt,
+            user_prompt=user_prompt
         )
-        
-        # Extract and clean up the response
-        content = response.choices[0].message.content.strip()
-        content = content.replace('```json', '').replace('```', '').strip()
-        
-        # Parse the ingredients list
-        ingredients = json.loads(content)
         
         # Update in database for future use
         with database.SessionLocal() as db:
