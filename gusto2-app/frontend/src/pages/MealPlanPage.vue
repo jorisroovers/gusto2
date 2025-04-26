@@ -47,7 +47,6 @@
                 <div class="meal-date-container">
                   <p v-if="currentMeal.Date" class="date-display">{{ formatDate(currentMeal.Date) }}</p>
                   <span v-if="isCurrentMealChanged" class="changed-indicator" title="This meal has unsaved changes">*</span>
-                  <button @click="selectTodaysMeal" class="today-button" :disabled="editMode">Today</button>
                 </div>
 
                 <button 
@@ -61,8 +60,6 @@
               </div>
 
               <div class="navigation-actions">
-                <div class="meal-counter">{{ currentIndex + 1 }} of {{ meals.length }}</div>
-
                 <div class="special-nav-buttons">
                   <button 
                     @click="findPreviousUnplanned" 
