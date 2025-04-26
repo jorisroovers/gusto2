@@ -25,10 +25,9 @@
               :class="{
                 'weekend': date.isWeekend,
                 'empty': !date.day,
-                // Apply 'no-meal' only if there's truly no meal entry
-                'no-meal': date.day && !date.hasMealEntry,
-                // Apply 'unplanned-weekend' if it's a weekend and the meal is unplanned
-                'unplanned-weekend': date.isWeekend && date.isUnplanned,
+                // Apply 'no-meal' if the day exists but the meal is unplanned (covers weekdays and weekends)
+                'no-meal': date.day && date.isUnplanned, 
+                // Removed 'unplanned-weekend' as its logic is now covered by 'no-meal'
                 'current-day': isCurrentDay(date),
                 'changed': date.isChanged,
                 'other-month': date.isOtherMonth
