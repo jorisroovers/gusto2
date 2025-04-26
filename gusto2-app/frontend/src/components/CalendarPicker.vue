@@ -24,7 +24,10 @@
               :class="{
                 'weekend': date.isWeekend,
                 'empty': !date.day,
-                'no-meal': date.day && !date.hasMeal,
+                // Apply 'no-meal' only if there's truly no meal entry
+                'no-meal': date.day && !date.hasMealEntry,
+                // Apply 'unplanned-weekend' if it's a weekend and the meal is unplanned
+                'unplanned-weekend': date.isWeekend && date.isUnplanned,
                 'current-day': isCurrentDay(date),
                 'changed': date.isChanged,
                 'other-month': date.isOtherMonth
@@ -183,50 +186,67 @@ export default {
       // Add empty days for padding at start
       for (let i = 0; i < startDay; i++) {
         const prevMonthDay = new Date(year, month, -i);
-        days.push({
+        const dateString = this.formatDateToString(prevMonthDay);
+        const mealIndex = this.findMealIndex(dateString);
+        const hasMealEntry = mealIndex !== -1;
+        const hasPlannedMeal = hasMealEntry && this.meals[mealIndex].Name && this.meals[mealIndex].Name.trim() !== '';
+
+        days.unshift({ // Use unshift to add to the beginning correctly
           day: prevMonthDay.getDate(),
           isWeekend: prevMonthDay.getDay() === 0 || prevMonthDay.getDay() === 6,
-          date: this.formatDateToString(prevMonthDay),
+          date: dateString,
           isOtherMonth: true,
-          hasMeal: this.checkHasMeal(prevMonthDay)
+          hasMealEntry: hasMealEntry,
+          hasPlannedMeal: hasPlannedMeal,
+          isUnplanned: hasMealEntry && !hasPlannedMeal,
+          isChanged: hasMealEntry && this.changedIndices.includes(mealIndex)
         });
       }
       
-      // Get number of days in month
       const lastDay = new Date(year, month + 1, 0).getDate();
       
-      // Add all days of the month
       for (let i = 1; i <= lastDay; i++) {
         const date = new Date(year, month, i, 12, 0, 0);
         const dateString = this.formatDateToString(date);
-        
-        const mealIndex = this.meals.findIndex(meal => {
-          if (!meal.Date) return false;
-          return this.formatDateToString(new Date(meal.Date)) === dateString;
-        });
+        const mealIndex = this.findMealIndex(dateString);
+        const hasMealEntry = mealIndex !== -1;
+        const hasPlannedMeal = hasMealEntry && this.meals[mealIndex].Name && this.meals[mealIndex].Name.trim() !== '';
 
         days.push({
           day: i,
           isWeekend: date.getDay() === 0 || date.getDay() === 6,
           date: dateString,
-          hasMeal: this.checkHasMeal(date),
-          isChanged: mealIndex !== -1 && this.changedIndices.includes(mealIndex),
+          hasMealEntry: hasMealEntry,
+          hasPlannedMeal: hasPlannedMeal,
+          isUnplanned: hasMealEntry && !hasPlannedMeal,
+          isChanged: hasMealEntry && this.changedIndices.includes(mealIndex),
           isOtherMonth: false
         });
       }
 
       // Add days from next month to complete the last week
       const lastDayOfMonth = new Date(year, month, lastDay);
-      const lastDayWeekday = lastDayOfMonth.getDay();
-      if (lastDayWeekday !== 0) { // If not Sunday, add remaining days
-        for (let i = 1; i <= 7 - lastDayWeekday; i++) {
+      let lastDayWeekday = lastDayOfMonth.getDay() -1; // Adjust Monday start
+      if (lastDayWeekday === -1) lastDayWeekday = 6;
+
+      const daysToAdd = (6 - lastDayWeekday);
+      if (daysToAdd > 0 && daysToAdd < 7) { // Check if padding is needed
+        for (let i = 1; i <= daysToAdd; i++) {
           const nextMonthDay = new Date(year, month + 1, i);
+          const dateString = this.formatDateToString(nextMonthDay);
+          const mealIndex = this.findMealIndex(dateString);
+          const hasMealEntry = mealIndex !== -1;
+          const hasPlannedMeal = hasMealEntry && this.meals[mealIndex].Name && this.meals[mealIndex].Name.trim() !== '';
+
           days.push({
             day: i,
             isWeekend: nextMonthDay.getDay() === 0 || nextMonthDay.getDay() === 6,
-            date: this.formatDateToString(nextMonthDay),
+            date: dateString,
             isOtherMonth: true,
-            hasMeal: this.checkHasMeal(nextMonthDay)
+            hasMealEntry: hasMealEntry,
+            hasPlannedMeal: hasPlannedMeal,
+            isUnplanned: hasMealEntry && !hasPlannedMeal,
+            isChanged: hasMealEntry && this.changedIndices.includes(mealIndex)
           });
         }
       }
@@ -235,7 +255,11 @@ export default {
       const weeks = [];
       for (let i = 0; i < days.length; i += 7) {
         const weekDays = days.slice(i, i + 7);
-        const weekStart = weekDays[0].date;
+        // Ensure week always has 7 days, padding if necessary (shouldn't happen with correct padding logic)
+        while (weekDays.length < 7) {
+          weekDays.push({ day: null }); // Add empty placeholders
+        }
+        const weekStart = weekDays[0].date; // Assuming first day always exists
         const week = {
           weekStart,
           days: weekDays,
@@ -345,13 +369,19 @@ export default {
       return `${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')}`;
     },
 
+    // Helper method to find meal index
+    findMealIndex(dateString) {
+      return this.meals.findIndex(meal => {
+        if (!meal.Date) return false;
+        return this.formatDateToString(new Date(meal.Date)) === dateString;
+      });
+    },
+
+    // Updated checkHasMeal to reflect planned status
     checkHasMeal(date) {
       const dateString = this.formatDateToString(date);
-      return this.meals.some(meal => {
-        if (!meal.Date) return false;
-        return this.formatDateToString(new Date(meal.Date)) === dateString && 
-               meal.Name && meal.Name.trim() !== '';
-      });
+      const mealIndex = this.findMealIndex(dateString);
+      return mealIndex !== -1 && this.meals[mealIndex].Name && this.meals[mealIndex].Name.trim() !== '';
     },
 
     validateAllWeeks() {
@@ -432,7 +462,7 @@ export default {
   border-radius: 4px;
   cursor: pointer;
   font-size: 0.875rem;
-  transition: all 0.2s ease;
+  transition: background-color 0.2s ease, transform 0.2s ease;
   position: relative;
   background: white;
   padding: 4px;
@@ -455,7 +485,12 @@ export default {
 }
 
 .no-meal {
-  background-color: #ffe6e6;
+  background-color: #fff0f0; /* Lighter red for truly empty days */
+  /* border: 1px dashed #ffcccc; */
+}
+
+.unplanned-weekend {
+  background-color: #ffe6e6; /* Original red for unplanned weekend meals */
 }
 
 .current-day {

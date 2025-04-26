@@ -34,6 +34,13 @@ https://www.ah.nl/allerhande/recepten-zoeken
 
 # Ordering
 
+Allow ingredients to be favorited, these should then be shown at the top or highlighted in some way.
+
+Food replacements:
+- Melk -> havermelk
+- cheese -> vegan cheese
+- 
+
 Preferred brands:
 - De Ceco, etc
 
