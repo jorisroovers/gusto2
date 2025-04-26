@@ -10,6 +10,7 @@
         <button @click="nextMonth" class="nav-button">
           <span class="icon">&#x2192;</span>
         </button>
+        <button @click="goToToday" class="nav-button today-button">Today</button>
       </div>
       <div class="calendar-grid">
         <!-- Weekday headers including validation column -->
@@ -391,7 +392,28 @@ export default {
           this.validateWeek(week);
         });
       });
-    }
+    },
+    goToToday() {
+      const today = new Date();
+      this.currentMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+      const todayString = this.formatDateToString(today);
+      
+      // Reuse logic from selectDate to find matching meal for today
+      const matchingMeal = this.meals.find(meal => {
+        if (!meal.Date) return false;
+        const mealDate = new Date(meal.Date);
+        const formattedMealDate = this.formatDateToString(mealDate);
+        return formattedMealDate === todayString;
+      });
+
+      // Emit the appropriate date string
+      if (matchingMeal && matchingMeal.Date) {
+        this.$emit('date-selected', matchingMeal.Date);
+      } else {
+        this.$emit('date-selected', todayString);
+      }
+      // No need to call validateAllWeeks here as the currentMonth watcher handles it.
+    },
   },
   mounted() {
     // Validate all weeks when component is mounted
@@ -413,9 +435,10 @@ export default {
 
 .calendar-header {
   display: flex;
-  justify-content: space-between;
+  justify-content: space-between; /* Adjust if needed */
   align-items: center;
   margin-bottom: 1.25rem;
+  gap: 0.5rem; /* Add gap between buttons */
 }
 
 .month-display {
@@ -425,6 +448,7 @@ export default {
   text-align: center;
   min-width: 140px;
   margin: 0 1rem; /* Add margin to prevent affecting grid layout */
+  flex-grow: 1; /* Allow month display to take available space */
 }
 
 .calendar-grid {
