@@ -88,6 +88,12 @@ class NoRepeatInWindowRule(Rule):
             meals_df = meals_df.copy()
             meals_df["Tags"] = meals_df["Tags"].str.lower()
 
+        # Helper to check if a meal should be excluded
+        def has_skip_validation(tags):
+            if pd.isna(tags):
+                return False
+            return any(tag.strip() == "skip-validation" for tag in tags.split(","))
+
         # If no date specified, check the entire dataframe
         if date is None:
             meal_occurrences = defaultdict(list)
@@ -103,7 +109,8 @@ class NoRepeatInWindowRule(Rule):
             for _, row in meals_df.iterrows():
                 if pd.isna(row["Name"]) or pd.isna(row["Date"]):
                     continue
-
+                if has_skip_validation(row.get("Tags", "")):
+                    continue
                 meal_name = row["Name"]
                 meal_date = row["Date"]
 
@@ -136,8 +143,9 @@ class NoRepeatInWindowRule(Rule):
             meals_df = meals_df.copy()
             meals_df["Date"] = pd.to_datetime(meals_df["Date"])
 
-            # Filter to the relevant date range
+            # Filter to the relevant date range and exclude meals with 'skip-validation' tag
             window_meals = meals_df[(meals_df["Date"] >= start_date) & (meals_df["Date"] <= end_date)]
+            window_meals = window_meals[~window_meals["Tags"].apply(has_skip_validation)]
 
             # Find repeating meals with their dates
             repeat_details = []
@@ -165,6 +173,9 @@ class NoRepeatInWindowRule(Rule):
 
         # Convert tags to lowercase
         meal_tags = [tag.lower() for tag in meal_tags] if meal_tags else []
+        # If this meal has the skip-validation rule tag, skip the check
+        if "skip-validation" in [tag.strip() for tag in meal_tags]:
+            return True, "Meal has 'skip-validation' tag, skipping repeat check"
 
         # Ensure the Date column is in datetime format
         meals_df = meals_df.copy()
@@ -174,14 +185,21 @@ class NoRepeatInWindowRule(Rule):
         if "Tags" in meals_df.columns:
             meals_df["Tags"] = meals_df["Tags"].str.lower()
 
+        # Helper to check if a meal should be excluded
+        def has_skip_validation(tags):
+            if pd.isna(tags):
+                return False
+            return any(tag.strip() == "skip-validation" for tag in tags.split(","))
+
         # Get the window bounds
         start_date = date - timedelta(days=self.window_days)
         end_date = date + timedelta(days=self.window_days)
 
-        # Filter to the relevant date range
+        # Filter to the relevant date range and exclude meals with 'skip-validation rule' tag
         window_meals = meals_df[
             (meals_df["Date"] >= start_date) & (meals_df["Date"] <= end_date) & (meals_df["Name"] == meal_name)
         ]
+        window_meals = window_meals[~window_meals["Tags"].apply(has_skip_validation)]
 
         if not window_meals.empty:
             first_occurrence = window_meals.iloc[0]

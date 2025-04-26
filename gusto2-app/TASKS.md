@@ -9,10 +9,7 @@ In the database, meals should just be pointing to the recipe, rather than mainta
 
 # Mealplan
 
-When there's an unplanned meal in the weekend, it's not showing as red in the front-end. 
-
 On the mealplan page, improve the left-hand page formatting and layout, especially the meal browsing experience. All features should remain, but it should look better and be more intuitive to use. Do not change the calendar UI on the right hand side.
-
 
 When clicking Get Rule-Based Suggestions, get different suggestions every time - the logic of the suggested meals itself shouldn't change.
 
@@ -21,9 +18,14 @@ More requirements:
 
 Fix comfort food friday, it's not working correctly
 
+
+In the rule that checks for the reoccurrence of meals in 3 weeks, make it skip that check if the meal has an "Exclude rule" tag.
+
 In the rule that checks whether meals are not planned more than once in 3 weeks, deeplink the violating meals to the recipes page, so when the meal is clicked in the violation message it should go to the recipe page showing that recipe (and including all the meals planned for that recipe, which is already implemented).
 
 # Recipes
+
+On the recipes page, allow for removal and addition of tags to recipes.
 
 When clicking on suggest recipe, show a loading animation
 
