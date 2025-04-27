@@ -2,9 +2,9 @@ import os
 from datetime import datetime
 
 import pandas as pd
-from sqlalchemy import Column, Date, Integer, String, Text, create_engine
+from sqlalchemy import Column, Date, Integer, String, Text, ForeignKey, create_engine
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import sessionmaker, relationship, joinedload
 
 # Path to the data directory - with fallback to a writable location
 DEFAULT_DATA_DIR = "/app/data"
@@ -37,10 +37,11 @@ class MealModel(Base):
     id = Column(Integer, primary_key=True, index=True)
     date = Column(Date, index=True)
     weekday = Column(String)
-    name = Column(String, index=True)
-    tags = Column(String)
+    recipe_id = Column(Integer, ForeignKey("recipes.id"), nullable=False)
     notes = Column(Text)
     notion_page_id = Column(String, index=True)
+
+    recipe = relationship("RecipeModel", backref="meals")
 
 
 class RecipeModel(Base):
@@ -174,19 +175,23 @@ def get_notion_page_id(date_str):
 
 def read_meals():
     """Read all meals from the database"""
+
     try:
         with SessionLocal() as db:
-            meals = db.query(MealModel).order_by(MealModel.date).all()
+            meals = db.query(MealModel).options(joinedload(MealModel.recipe)).order_by(MealModel.date).all()
 
         # Convert to pandas DataFrame for compatibility with existing code
         meals_data = []
-        for meal in meals:
+        for i, meal in enumerate(meals):
+            recipe = meal.recipe
+            if recipe is None:
+                continue  # Skip meals with no valid recipe
             meals_data.append(
                 {
                     "Date": meal.date,
                     "Weekday": meal.weekday,
-                    "Name": meal.name,
-                    "Tags": meal.tags,
+                    "Name": recipe.name,
+                    "Tags": recipe.tags,
                     "Notes": meal.notes,
                     "notion_page_id": meal.notion_page_id,
                 }
@@ -207,7 +212,7 @@ def read_meals():
             meals_df = meals_df.drop("notion_page_id", axis=1)
 
         return meals_df
-    except Exception:
+    except Exception as e:
         # Return empty dataframe
         return pd.DataFrame(columns=["Date", "Weekday", "Name", "Tags", "Notes"])
 
@@ -265,22 +270,31 @@ def update_changeset(index, meal):
             if index < 0 or index >= len(meals):
                 return False
 
-            # Get the meal to update
             db_meal = meals[index]
 
-            # Update meal attributes
+            # Update recipe reference if Name is provided
             if "Name" in meal and meal["Name"] is not None:
-                db_meal.name = meal["Name"]
+                recipe = db.query(RecipeModel).filter_by(name=meal["Name"]).first()
+                if not recipe:
+                    # Create new recipe if it doesn't exist
+                    recipe = RecipeModel(name=meal["Name"], tags=meal.get("Tags"))
+                    db.add(recipe)
+                    db.commit()
+                db_meal.recipe_id = recipe.id
+
+            # Update tags on the recipe if provided
             if "Tags" in meal and meal["Tags"] is not None:
-                # Normalize tags to lowercase
-                if meal["Tags"]:
-                    meal["Tags"] = ",".join([tag.strip().lower() for tag in meal["Tags"].split(",") if tag.strip()])
-                db_meal.tags = meal["Tags"]
+                recipe = db.query(RecipeModel).filter_by(id=db_meal.recipe_id).first()
+                if recipe:
+                    # Normalize tags to lowercase
+                    if meal["Tags"]:
+                        meal["Tags"] = ",".join([tag.strip().lower() for tag in meal["Tags"].split(",") if tag.strip()])
+                    recipe.tags = meal["Tags"]
+
             if "Notes" in meal and meal["Notes"] is not None:
                 db_meal.notes = meal["Notes"]
             if "Date" in meal and meal["Date"] is not None:
                 try:
-                    # Try to parse the date consistently
                     if isinstance(meal["Date"], str):
                         date_obj = pd.to_datetime(meal["Date"], format="%Y/%m/%d")
                     else:
@@ -292,13 +306,10 @@ def update_changeset(index, meal):
 
             # Check if index already exists in changed_indices
             existing_index = db.query(ChangedIndexModel).filter_by(index=index).first()
-
-            # Only add to changed_indices if it doesn't already exist
             if not existing_index:
                 changed_index = ChangedIndexModel(index=index)
                 db.add(changed_index)
 
-            # Save changes
             db.commit()
 
         return True
@@ -424,33 +435,50 @@ def save_meals_to_db(meals_df):
                 # Handle date conversion
                 if "Date" in row and pd.notna(row["Date"]) and not pd.isna(row["Date"]):
                     try:
-                        # Try to parse the date - it might be a string or already a datetime
                         if isinstance(row["Date"], str):
                             date_obj = pd.to_datetime(row["Date"], format="%Y/%m/%d")
                         else:
                             date_obj = pd.to_datetime(row["Date"])
-
                         weekday = date_obj.strftime("%A")
                         date_str = date_obj.strftime("%Y/%m/%d")
                     except Exception:
                         continue
 
-                # Get notion page id if available
                 notion_page_id = get_notion_page_id(date_str) if date_str else None
 
-                # Handle NaN/NaT values for other fields
+                # Get or create recipe by name
                 name = row.get("Name") if pd.notna(row.get("Name")) else None
                 tags = row.get("Tags") if pd.notna(row.get("Tags")) else None
                 notes = row.get("Notes") if pd.notna(row.get("Notes")) else None
 
+                if not name:
+                    continue  # Skip meals without a recipe name
+
+                recipe = db.query(RecipeModel).filter_by(name=name).first()
+                if not recipe:
+                    recipe = RecipeModel(name=name, tags=tags)
+                    db.add(recipe)
+                    db.commit()
+                else:
+                    # Optionally update tags if changed
+                    if tags is not None:
+                        recipe.tags = tags
+
                 meal = MealModel(
-                    date=date_obj, weekday=weekday, name=name, tags=tags, notes=notes, notion_page_id=notion_page_id
+                    date=date_obj,
+                    weekday=weekday,
+                    recipe_id=recipe.id,
+                    notes=notes,
+                    notion_page_id=notion_page_id,
                 )
                 db.add(meal)
 
-            # Commit the transaction
             db.commit()
 
         return True
     except Exception:
         return False
+
+
+# Remove name and tags from MealModel, add recipe_id foreign key and relationship to RecipeModel.
+# All meal creation and update logic now uses recipe_id and fetches name/tags from the related recipe.

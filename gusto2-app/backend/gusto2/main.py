@@ -196,72 +196,81 @@ def fetch_from_notion():
         # Process the response
         meals_data = []
 
-        for page in all_results:
-            page_id = page.get("id")
-            properties = page.get("properties", {})
-            meal = {}
-            meal["notion_page_id"] = page_id
-
-            # Extract date if exists
-            date_str = None
-            if "Date" in properties:
-                date_prop = properties["Date"]
-                if date_prop["type"] == "date" and date_prop.get("date"):
-                    date_str = date_prop["date"].get("start")
-                    if date_str:
-                        # Convert from ISO format to our expected format
-                        try:
-                            date_obj = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
-                            meal["date"] = date_obj
-                            meal["weekday"] = date_obj.strftime("%A")  # Get day name
-
-                            # Store the page ID in database
-                            formatted_date = date_obj.strftime("%Y/%m/%d")
-                            database.save_notion_page_id(formatted_date, page_id)
-                        except ValueError:
-                            meal["date"] = None
-                            meal["weekday"] = None
-
-            # Extract name if exists
-            if "Name" in properties:
-                name_prop = properties["Name"]
-                if name_prop["type"] == "title" and name_prop.get("title"):
-                    title_parts = [part.get("plain_text", "") for part in name_prop.get("title", [])]
-                    meal["name"] = " ".join(title_parts).strip()
-
-            # Extract tags if exists
-            if "Tags" in properties:
-                tags_prop = properties["Tags"]
-                if tags_prop["type"] == "multi_select" and tags_prop.get("multi_select"):
-                    tags = [tag.get("name", "") for tag in tags_prop.get("multi_select", [])]
-                    meal["tags"] = ", ".join(tags)
-
-            # Extract notes if exists
-            if "Notes" in properties:
-                notes_prop = properties["Notes"]
-                if notes_prop["type"] == "rich_text" and notes_prop.get("rich_text"):
-                    notes_parts = [part.get("plain_text", "") for part in notes_prop.get("rich_text", [])]
-                    meal["notes"] = " ".join(notes_parts).strip()
-
-            meals_data.append(meal)
-
-        if not meals_data:
-            logger.warning("No meal data found in Notion database")
-            return False
-
-        # Clear existing meals from the database and insert new data from Notion
-        # This is only called from the reload_meals endpoint when the user explicitly clicks the "Reload" button
         with database.SessionLocal() as db:
-            # Delete all existing meals
+            for page in all_results:
+                page_id = page.get("id")
+                properties = page.get("properties", {})
+                meal = {}
+                meal["notion_page_id"] = page_id
+
+                # Extract date if exists
+                date_str = None
+                if "Date" in properties:
+                    date_prop = properties["Date"]
+                    if date_prop["type"] == "date" and date_prop.get("date"):
+                        date_str = date_prop["date"].get("start")
+                        if date_str:
+                            try:
+                                date_obj = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
+                                meal["date"] = date_obj
+                                meal["weekday"] = date_obj.strftime("%A")
+                                formatted_date = date_obj.strftime("%Y/%m/%d")
+                                database.save_notion_page_id(formatted_date, page_id)
+                            except ValueError:
+                                meal["date"] = None
+                                meal["weekday"] = None
+
+                # Extract name and tags, and ensure recipe exists
+                recipe_name = None
+                recipe_tags = None
+                if "Name" in properties:
+                    name_prop = properties["Name"]
+                    if name_prop["type"] == "title" and name_prop.get("title"):
+                        title_parts = [part.get("plain_text", "") for part in name_prop.get("title", [])]
+                        recipe_name = " ".join(title_parts).strip()
+                if "Tags" in properties:
+                    tags_prop = properties["Tags"]
+                    if tags_prop["type"] == "multi_select" and tags_prop.get("multi_select"):
+                        tags = [tag.get("name", "") for tag in tags_prop.get("multi_select", [])]
+                        recipe_tags = ", ".join(tags)
+
+                recipe = None
+                if recipe_name:
+                    recipe = db.query(database.RecipeModel).filter_by(name=recipe_name).first()
+                    if not recipe:
+                        recipe = database.RecipeModel(name=recipe_name, tags=recipe_tags)
+                        db.add(recipe)
+                        db.commit()
+                    elif recipe_tags is not None:
+                        recipe.tags = recipe_tags
+                        db.commit()
+                    meal["recipe_id"] = recipe.id
+                else:
+                    meal["recipe_id"] = None
+
+                # Extract notes if exists
+                if "Notes" in properties:
+                    notes_prop = properties["Notes"]
+                    if notes_prop["type"] == "rich_text" and notes_prop.get("rich_text"):
+                        notes_parts = [part.get("plain_text", "") for part in notes_prop.get("rich_text", [])]
+                        meal["notes"] = " ".join(notes_parts).strip()
+
+                # Only add meal if recipe_id is not None
+                if meal.get("recipe_id") is not None:
+                    meals_data.append(meal)
+                else:
+                    logger.warning(f"Skipping meal for Notion page {page_id} because no valid recipe name was found.")
+
+            if not meals_data:
+                logger.warning("No meal data found in Notion database")
+                return False
+
+            # Clear existing meals from the database and insert new data from Notion
             db.query(database.MealModel).delete()
             db.commit()
-
-            # Insert new meals
             for meal_data in meals_data:
                 meal_obj = database.MealModel(**meal_data)
                 db.add(meal_obj)
-
-            # Commit the transaction
             db.commit()
 
         logger.info(f"Successfully saved {len(meals_data)} meals from Notion to database")

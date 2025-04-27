@@ -5,8 +5,6 @@ Clean up the code, make it pass ruff.
 
 Run ruff against the backend code, fix all issues so it passes.
 
-In the database, meals should just be pointing to the recipe, rather than maintaining a separate copy of the meal and tags all together. This way data is not duplicated and when editing the tags of a meal or the meal itself, the recipe is updated everywhere instead of only for that day.
-
 # Mealplan
 
 On the mealplan page, improve the left-hand page formatting and layout, especially the meal browsing experience. All features should remain, but it should look better and be more intuitive to use. Do not change the calendar UI on the right hand side.
