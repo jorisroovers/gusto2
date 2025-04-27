@@ -191,14 +191,15 @@ export default {
         const hasMealEntry = mealIndex !== -1;
         const hasPlannedMeal = hasMealEntry && this.meals[mealIndex].Name && this.meals[mealIndex].Name.trim() !== '';
 
-        days.unshift({ // Use unshift to add to the beginning correctly
+        days.unshift({
           day: prevMonthDay.getDate(),
           isWeekend: prevMonthDay.getDay() === 0 || prevMonthDay.getDay() === 6,
           date: dateString,
           isOtherMonth: true,
           hasMealEntry: hasMealEntry,
           hasPlannedMeal: hasPlannedMeal,
-          isUnplanned: hasMealEntry && !hasPlannedMeal,
+          // Mark as unplanned if there is no meal entry or if the meal entry is unplanned
+          isUnplanned: !hasPlannedMeal,
           isChanged: hasMealEntry && this.changedIndices.includes(mealIndex)
         });
       }
@@ -218,7 +219,8 @@ export default {
           date: dateString,
           hasMealEntry: hasMealEntry,
           hasPlannedMeal: hasPlannedMeal,
-          isUnplanned: hasMealEntry && !hasPlannedMeal,
+          // Mark as unplanned if there is no meal entry or if the meal entry is unplanned
+          isUnplanned: !hasPlannedMeal,
           isChanged: hasMealEntry && this.changedIndices.includes(mealIndex),
           isOtherMonth: false
         });
@@ -245,7 +247,8 @@ export default {
             isOtherMonth: true,
             hasMealEntry: hasMealEntry,
             hasPlannedMeal: hasPlannedMeal,
-            isUnplanned: hasMealEntry && !hasPlannedMeal,
+            // Mark as unplanned if there is no meal entry or if the meal entry is unplanned
+            isUnplanned: !hasPlannedMeal,
             isChanged: hasMealEntry && this.changedIndices.includes(mealIndex)
           });
         }
