@@ -291,6 +291,13 @@ export default {
       this.currentMonth = new Date(this.currentMonth.getFullYear(), this.currentMonth.getMonth() + 1);
       this.validateAllWeeks();
     },
+    goToToday() {
+      const today = new Date();
+      this.currentMonth = new Date(today.getFullYear(), today.getMonth(), 1); // Set calendar view to current month
+      const todayString = this.formatDateToString(today);
+      this.$emit('date-selected', todayString); // Emit event to update parent
+      this.validateAllWeeks(); // Re-validate if needed
+    },
     selectDate(date) {
       if (date.date) {
         // Always emit the normalized date string (yyyy-mm-dd)
@@ -385,27 +392,6 @@ export default {
           this.validateWeek(week);
         });
       });
-    },
-    goToToday() {
-      const today = new Date();
-      this.currentMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-      const todayString = this.formatDateToString(today);
-      
-      // Reuse logic from selectDate to find matching meal for today
-      const matchingMeal = this.meals.find(meal => {
-        if (!meal.Date) return false;
-        const mealDate = new Date(meal.Date);
-        const formattedMealDate = this.formatDateToString(mealDate);
-        return formattedMealDate === todayString;
-      });
-
-      // Emit the appropriate date string
-      if (matchingMeal && matchingMeal.Date) {
-        this.$emit('date-selected', matchingMeal.Date);
-      } else {
-        this.$emit('date-selected', todayString);
-      }
-      // No need to call validateAllWeeks here as the currentMonth watcher handles it.
     },
   },
   mounted() {
