@@ -563,8 +563,18 @@ export default {
         nextDate.setDate(start.getDate() + offset);
         const dateString = this.formatDateToString(nextDate);
         
-        // Check if this date is unplanned (has no meal entry or empty meal name)
-        const mealIndex = this.meals.findIndex(meal => meal.Date === dateString);
+        // Correctly check if this date is unplanned
+        const mealIndex = this.meals.findIndex(meal => {
+          if (!meal.Date) return false;
+          const mealDate = new Date(meal.Date);
+          if (isNaN(mealDate.getTime())) return false;
+          const year = mealDate.getFullYear();
+          const month = String(mealDate.getMonth() + 1).padStart(2, '0');
+          const day = String(mealDate.getDate()).padStart(2, '0');
+          const mealDateString = `${year}-${month}-${day}`;
+          return mealDateString === dateString;
+        });
+        
         const isUnplanned = mealIndex === -1 || 
                            !this.meals[mealIndex].Name || 
                            this.meals[mealIndex].Name.trim() === '';
@@ -577,6 +587,7 @@ export default {
       }
       
       console.log("No unplanned dates found in the next 60 days");
+      this.showNotification('No unplanned dates found in the next 60 days', 'info'); // Added notification
     },
     
     findPreviousUnplanned() {
@@ -591,8 +602,18 @@ export default {
         prevDate.setDate(start.getDate() - offset);
         const dateString = this.formatDateToString(prevDate);
         
-        // Check if this date is unplanned (has no meal entry or empty meal name)
-        const mealIndex = this.meals.findIndex(meal => meal.Date === dateString);
+        // Correctly check if this date is unplanned
+        const mealIndex = this.meals.findIndex(meal => {
+          if (!meal.Date) return false;
+          const mealDate = new Date(meal.Date);
+          if (isNaN(mealDate.getTime())) return false;
+          const year = mealDate.getFullYear();
+          const month = String(mealDate.getMonth() + 1).padStart(2, '0');
+          const day = String(mealDate.getDate()).padStart(2, '0');
+          const mealDateString = `${year}-${month}-${day}`;
+          return mealDateString === dateString;
+        });
+        
         const isUnplanned = mealIndex === -1 || 
                            !this.meals[mealIndex].Name || 
                            this.meals[mealIndex].Name.trim() === '';
@@ -605,6 +626,7 @@ export default {
       }
       
       console.log("No unplanned dates found in the previous 60 days");
+      this.showNotification('No unplanned dates found in the previous 60 days', 'info'); // Added notification
     },
     formatDate(dateString) {
       if (!dateString) return '';
