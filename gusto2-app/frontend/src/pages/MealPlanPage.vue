@@ -311,35 +311,68 @@ export default {
     }
   },
   methods: {
+    initializeDate() {
+      // Sets selectedDate to today's date in YYYY-MM-DD format
+      const today = new Date();
+      const year = today.getFullYear();
+      const month = String(today.getMonth() + 1).padStart(2, '0');
+      const day = String(today.getDate()).padStart(2, '0');
+      this.selectedDate = `${year}-${month}-${day}`;
+    },
     async fetchMeals() {
       this.loading = true;
       this.error = null;
+      this.notification = 'Loading meals...';
+      this.notificationType = 'info';
       try {
         const response = await axios.get('/api/meals');
         if (response.data && response.data.meals) {
-          this.meals = response.data.meals;
-          // Get changed indices from separate endpoint
-          try {
-            const changesResponse = await axios.get('/api/meals/changes');
-            if (changesResponse.data && changesResponse.data.changedIndices) {
-              this.changedIndices = changesResponse.data.changedIndices;
-              this.hasChanges = this.changedIndices.length > 0;
+          // Ensure dates are consistently formatted (YYYY-MM-DD) and add loading state
+          this.meals = response.data.meals.map(meal => {
+            let formattedDate = meal.Date;
+            try {
+              const dateObj = new Date(meal.Date);
+               if (!isNaN(dateObj.getTime())) {
+                 const year = dateObj.getFullYear();
+                 const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+                 const day = String(dateObj.getDate()).padStart(2, '0');
+                 formattedDate = `${year}-${month}-${day}`;
+               }
+            } catch (e) {
+              console.warn(`Invalid date format for meal: ${meal.Name}`, meal.Date);
             }
-          } catch (changesError) {
-            this.changedIndices = [];
-            this.hasChanges = false;
-          }
-          this.initSelectedDate();
+            return { ...meal, Date: formattedDate, isLoading: false };
+          });
+          this.updateCurrentIndex(); // Update index based on selectedDate AFTER meals are loaded and formatted
+          this.message = 'Meals loaded successfully.';
+          this.notification = 'Meals loaded.';
+          this.notificationType = 'success';
         } else {
-          this.error = 'No meals data found';
+          this.meals = [];
+          this.message = 'No meals found.';
+          this.notification = 'No meals found.';
+          this.notificationType = 'warning';
         }
+        this.changedIndices = []; // Reset changes on reload
+        this.hasChanges = false;
       } catch (error) {
-        this.error = 'Error fetching meals from backend';
+        console.error('Error fetching meals:', error);
+        this.error = 'Failed to load meals. Please try again.';
+        this.message = this.error;
+        this.notification = this.error;
+        this.notificationType = 'error';
       } finally {
         this.loading = false;
+        // Clear notification after a delay
+        setTimeout(() => { this.notification = ''; }, 3000);
       }
     },
-    
+    updateCurrentIndex() {
+      // Find the index based on the current selectedDate (YYYY-MM-DD)
+      // Assumes meal.Date is also formatted as YYYY-MM-DD after fetchMeals
+      const idx = this.meals.findIndex(meal => meal.Date === this.selectedDate);
+      this.currentIndex = idx; // Will be -1 if no meal found for selectedDate
+    },
     async saveAllChanges() {
       if (!this.hasChanges) return;
       
@@ -630,35 +663,88 @@ export default {
     },
     formatDate(dateString) {
       if (!dateString) return '';
-      const date = new Date(dateString);
-      return date.toLocaleDateString();
-    },
-    formatDateToString(date) {
-      // Keep this consistent - uses local date parts
-      if (!(date instanceof Date) || isNaN(date.getTime())) {
-        return '';
+      try {
+        // Split the date string and create Date object in UTC to avoid timezone issues
+        const [year, month, day] = dateString.split('-').map(Number);
+        const date = new Date(Date.UTC(year, month - 1, day));
+        return date.toLocaleDateString(undefined, { 
+          weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' 
+        });
+      } catch (e) {
+        console.error("Error formatting date:", dateString, e);
+        return dateString; // Fallback to original string
       }
-      const year = date.getFullYear();
-      const month = String(date.getMonth() + 1).padStart(2, '0');
-      const day = String(date.getDate()).padStart(2, '0');
-      return `${year}-${month}-${day}`;
     },
-    selectDate(dateString) {
-      console.log("Selecting date:", dateString);
-      this.selectedDate = dateString; // dateString is already yyyy-mm-dd from CalendarPicker
-      // Compare yyyy-mm-dd strings
-      const idx = this.meals.findIndex(meal => {
-        if (!meal.Date) return false;
-        const mealDate = new Date(meal.Date);
-        if (isNaN(mealDate.getTime())) return false;
-        const year = mealDate.getFullYear();
-        const month = String(mealDate.getMonth() + 1).padStart(2, '0');
-        const day = String(mealDate.getDate()).padStart(2, '0');
-        const mealDateString = `${year}-${month}-${day}`;
-        return mealDateString === dateString;
-      });
-      this.currentIndex = idx;
-      console.log("Current index set to:", idx, "for date:", dateString);
+    selectDate(date) { // date is expected to be YYYY-MM-DD
+      if (this.editMode) {
+        // Optionally ask for confirmation before discarding edits
+        console.log("Exiting edit mode due to date change");
+        this.cancelEdit(); // Or implement confirmation logic
+      }
+      this.selectedDate = date;
+      this.updateCurrentIndex(); // Update index when date changes
+      this.showDeleteConfirmation = false;
+      this.showUndoConfirmation = false;
+      // Update URL query parameter using replace to avoid polluting history
+      if (this.$route.query.date !== this.selectedDate) {
+        this.$router.replace({ query: { date: this.selectedDate } }).catch(err => {
+          // Ignore navigation duplicated errors which are expected if the query is already correct
+          if (err.name !== 'NavigationDuplicated' && !err.message.includes('Avoided redundant navigation')) {
+            console.error('Router replace error:', err);
+          }
+        });
+      }
+    },
+    // --- Refactored Navigation Methods ---
+    previousMeal() {
+      if (this.editMode) return;
+      let targetDate = new Date(Date.UTC(...this.selectedDate.split('-').map((num, index) => index === 1 ? parseInt(num) - 1 : parseInt(num))));
+      targetDate.setUTCDate(targetDate.getUTCDate() - 1);
+      this.selectDate(targetDate.toISOString().split('T')[0]);
+    },
+    nextMeal() {
+      if (this.editMode) return;
+      let targetDate = new Date(Date.UTC(...this.selectedDate.split('-').map((num, index) => index === 1 ? parseInt(num) - 1 : parseInt(num))));
+      targetDate.setUTCDate(targetDate.getUTCDate() + 1);
+      this.selectDate(targetDate.toISOString().split('T')[0]);
+    },
+    findPreviousUnplanned() {
+       if (this.editMode) return;
+      let currentDate = new Date(Date.UTC(...this.selectedDate.split('-').map((num, index) => index === 1 ? parseInt(num) - 1 : parseInt(num))));
+      let found = false;
+      for (let i = 0; i < 365; i++) { // Limit search depth
+        currentDate.setUTCDate(currentDate.getUTCDate() - 1);
+        const dateStr = currentDate.toISOString().split('T')[0];
+        // Check if a meal with a Name exists for this date
+        const mealExists = this.meals.some(meal => meal.Date === dateStr && meal.Name && meal.Name.trim() !== '');
+        if (!mealExists) {
+          this.selectDate(dateStr);
+          found = true;
+          break;
+        }
+      }
+      if (!found) {
+        this.showNotification('No previous unplanned day found within the last year.', 'info');
+      }
+    },
+    findNextUnplanned() {
+       if (this.editMode) return;
+      let currentDate = new Date(Date.UTC(...this.selectedDate.split('-').map((num, index) => index === 1 ? parseInt(num) - 1 : parseInt(num))));
+      let found = false;
+      for (let i = 0; i < 365; i++) { // Limit search depth
+        currentDate.setUTCDate(currentDate.getUTCDate() + 1);
+        const dateStr = currentDate.toISOString().split('T')[0];
+        // Check if a meal with a Name exists for this date
+        const mealExists = this.meals.some(meal => meal.Date === dateStr && meal.Name && meal.Name.trim() !== '');
+        if (!mealExists) {
+          this.selectDate(dateStr);
+          found = true;
+          break;
+        }
+      }
+       if (!found) {
+        this.showNotification('No next unplanned day found within the next year.', 'info');
+      }
     },
     async suggestMeal() {
       try {
@@ -860,16 +946,27 @@ export default {
     },
   },
   async mounted() {
-    await Promise.all([
-      this.fetchMeals(),
-      this.fetchTagSuggestions()
-    ]);
-
-    // Check if we have a date query parameter
-    const dateParam = this.$route.query.date;
-    if (dateParam) {
-      this.selectDate(dateParam);
+    // Check for date query parameter
+    const queryDate = this.$route.query.date;
+    if (queryDate) {
+      // Validate and format the date if necessary
+      // Assuming queryDate is in 'YYYY-MM-DD' format or compatible with new Date()
+      const dateObj = new Date(queryDate);
+      if (!isNaN(dateObj.getTime())) {
+        // Ensure the date is formatted as YYYY-MM-DD
+        const year = dateObj.getFullYear();
+        const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+        const day = String(dateObj.getDate()).padStart(2, '0');
+        this.selectedDate = `${year}-${month}-${day}`;
+      } else {
+        console.warn('Invalid date format in query parameter:', queryDate);
+        this.initializeDate(); // Fallback to default date
+      }
+    } else {
+      this.initializeDate(); // Initialize with today's date if no query param
     }
+    await this.fetchMeals(); // Fetch meals AFTER setting the initial date
+    this.fetchTagSuggestions();
   },
   watch: {
     // Watch for route changes to handle navigation between meals
@@ -1018,27 +1115,30 @@ export default {
 
 .meal-date-container {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 5px;
-  position: relative;
-  padding: 0 10px;
+  justify-content: center; /* Center the date */
+  flex-grow: 1; /* Allow it to take available space */
+  position: relative; /* For positioning the changed indicator */
+  min-width: 200px; /* Ensure enough space for date */
 }
 
 .date-display {
-  font-size: 1.2em;
-  font-weight: 600;
-  color: #2c3e50;
-  margin: 0;
+  margin: 0; /* Remove default margins */
+  font-size: 1.1rem;
+  font-weight: 500;
+  color: #333;
+  text-align: center; /* Ensure text is centered */
 }
 
 .changed-indicator {
-  position: absolute;
-  top: -5px;
-  right: -5px;
-  color: #e74c3c;
+  color: orange;
+  font-size: 1.5rem; /* Make asterisk larger */
   font-weight: bold;
-  font-size: 1.2em;
+  margin-left: 8px; /* Space it from the date */
+  position: absolute; /* Position relative to container */
+  right: -15px; /* Adjust position as needed */
+  top: 50%;
+  transform: translateY(-50%);
 }
 
 .today-button {
