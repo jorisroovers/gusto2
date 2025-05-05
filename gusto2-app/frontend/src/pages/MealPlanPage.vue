@@ -37,7 +37,7 @@
               <div class="nav-header">
                 <button 
                   @click="previousMeal" 
-                  :disabled="currentIndex <= 0 || editMode"
+                  :disabled="editMode"
                   class="nav-button"
                 >
                   <span class="nav-icon">←</span>
@@ -51,7 +51,7 @@
 
                 <button 
                   @click="nextMeal" 
-                  :disabled="currentIndex >= meals.length - 1 || editMode"
+                  :disabled="editMode"
                   class="nav-button"
                 >
                   <span class="nav-text">Next</span>
@@ -220,7 +220,7 @@
             <calendar-picker 
               v-if="!loading && !error" 
               :meals="meals" 
-              :selected-date="currentMeal.Date"
+              :selected-date="selectedDate"
               :changed-indices="changedIndices"
               @date-selected="selectDate"
               class="calendar-section"
@@ -250,7 +250,8 @@ export default {
   data() {
     return {
       meals: [],
-      currentIndex: 0,
+      currentIndex: 0, // Index in meals array, or -1 if no meal entry for selectedDate
+      selectedDate: '', // ISO string, tracks the selected date (can be a date with no meal entry)
       loading: true,
       error: null,
       message: 'Loading meals from backend...',
@@ -269,10 +270,24 @@ export default {
   },
   computed: {
     currentMeal() {
-      return this.meals.length > 0 ? this.meals[this.currentIndex] : {};
+      // If selectedDate is set, return the meal for that date, or a virtual meal object
+      if (!this.selectedDate) return {};
+      const idx = this.meals.findIndex(meal => meal.Date === this.selectedDate);
+      if (idx !== -1) {
+        return this.meals[idx];
+      }
+      // Virtual meal object for unplanned date
+      return {
+        Date: this.selectedDate,
+        Name: '',
+        Tags: '',
+        Notes: ''
+      };
     },
     isCurrentMealChanged() {
-      return this.changedIndices.includes(this.currentIndex);
+      // Only true if there is a meal entry for selectedDate and it's changed
+      const idx = this.meals.findIndex(meal => meal.Date === this.selectedDate);
+      return idx !== -1 && this.changedIndices.includes(idx);
     }
   },
   methods: {
@@ -283,7 +298,6 @@ export default {
         const response = await axios.get('/api/meals');
         if (response.data && response.data.meals) {
           this.meals = response.data.meals;
-          
           // Get changed indices from separate endpoint
           try {
             const changesResponse = await axios.get('/api/meals/changes');
@@ -295,8 +309,7 @@ export default {
             this.changedIndices = [];
             this.hasChanges = false;
           }
-          
-          this.selectTodaysMeal();
+          this.initSelectedDate();
         } else {
           this.error = 'No meals data found';
         }
@@ -356,27 +369,13 @@ export default {
     },
     
     restoreMealPosition() {
-      if (!this.lastViewedDate || !this.meals.length) {
-        this.selectTodaysMeal();
+      if (!this.lastViewedDate) {
+        this.initSelectedDate();
         return;
       }
-      
-      const lastViewedIndex = this.meals.findIndex(meal => {
-        if (!meal.Date) return false;
-        
-        const mealDate = new Date(meal.Date);
-        return (
-          mealDate.getFullYear() === this.lastViewedDate.getFullYear() &&
-          mealDate.getMonth() === this.lastViewedDate.getMonth() &&
-          mealDate.getDate() === this.lastViewedDate.getDate()
-        );
-      });
-      
-      if (lastViewedIndex !== -1) {
-        this.currentIndex = lastViewedIndex;
-      } else {
-        this.findNearestDateTo(this.lastViewedDate);
-      }
+      // Try to find a meal for lastViewedDate
+      const iso = this.formatDateToString(this.lastViewedDate);
+      this.selectDate(iso);
     },
     
     findNearestDateTo(targetDate) {
@@ -427,18 +426,27 @@ export default {
         // Convert tags to lowercase before saving
         const mealData = {
           ...this.editedMeal,
+          Date: this.selectedDate,
           Tags: this.editedMeal.Tags ? this.editedMeal.Tags.split(',').map(t => t.trim().toLowerCase()).join(',') : ''
         };
-        
-        const response = await axios.put(`/api/meal/${this.currentIndex}`, mealData);
-        
-        this.meals[this.currentIndex] = { ...mealData };
-        
+        let idx = this.meals.findIndex(meal => meal.Date === this.selectedDate);
+        let response;
+        if (idx !== -1) {
+          response = await axios.put(`/api/meal/${idx}`, mealData);
+          this.meals[idx] = { ...mealData };
+        } else {
+          // Create new meal entry for this date
+          response = await axios.post('/api/meal', mealData);
+          // Assume backend returns the new meal with index
+          if (response.data && response.data.meal) {
+            this.meals.push(response.data.meal);
+            idx = this.meals.length - 1;
+          }
+        }
+        this.currentIndex = idx;
         this.hasChanges = true;
         this.changedIndices = response.data.changedIndices || [];
-        
         this.showNotification('Meal updated! Use Save All to persist to disk.', 'success');
-        
         this.editMode = false;
         this.editedMeal = {};
       } catch (error) {
@@ -448,29 +456,19 @@ export default {
       }
     },
     
-    selectTodaysMeal() {
-      if (!this.meals.length) return;
-      
-      const today = new Date();
-      const todayYear = today.getFullYear();
-      const todayMonth = today.getMonth();
-      const todayDay = today.getDate();
-      
-      const todayIndex = this.meals.findIndex(meal => {
-        if (!meal.Date) return false;
-        
-        const mealDate = new Date(meal.Date);
-        return (
-          mealDate.getFullYear() === todayYear &&
-          mealDate.getMonth() === todayMonth &&
-          mealDate.getDate() === todayDay
-        );
-      });
-      
-      if (todayIndex !== -1) {
-        this.currentIndex = todayIndex;
+    initSelectedDate() {
+      // Set selectedDate to today if in range, else first meal date
+      const today = this.formatDateToString(new Date());
+      const idx = this.meals.findIndex(meal => meal.Date === today);
+      if (idx !== -1) {
+        this.selectedDate = today;
+        this.currentIndex = idx;
+      } else if (this.meals.length > 0) {
+        this.selectedDate = this.meals[0].Date;
+        this.currentIndex = 0;
       } else {
-        this.findNearestMeal();
+        this.selectedDate = today;
+        this.currentIndex = -1;
       }
     },
     
@@ -521,61 +519,93 @@ export default {
     },
     
     nextMeal() {
-      if (this.currentIndex < this.meals.length - 1) {
-        this.currentIndex++;
-      }
+      // Go to the next day, regardless of whether there's a meal entry
+      if (!this.selectedDate) return;
+      const current = new Date(this.selectedDate);
+      const nextDay = new Date(current);
+      nextDay.setDate(current.getDate() + 1);
+      this.selectDate(this.formatDateToString(nextDay));
     },
-    
     previousMeal() {
-      if (this.currentIndex > 0) {
-        this.currentIndex--;
-      }
+      // Go to the previous day, regardless of whether there's a meal entry
+      if (!this.selectedDate) return;
+      const current = new Date(this.selectedDate);
+      const prevDay = new Date(current);
+      prevDay.setDate(current.getDate() - 1);
+      this.selectDate(this.formatDateToString(prevDay));
     },
-    
+
     findNextUnplanned() {
-      if (!this.meals.length) return;
+      if (!this.selectedDate) return;
+      const start = new Date(this.selectedDate);
+      start.setHours(0, 0, 0, 0);
+      console.log("Finding next unplanned from:", this.selectedDate);
       
-      const nextUnplannedIndex = this.meals.findIndex((meal, index) => {
-        if (index <= this.currentIndex) return false;
-        return meal.Date && (!meal.Name || meal.Name.trim() === '');
-      });
-      
-      if (nextUnplannedIndex !== -1) {
-        this.currentIndex = nextUnplannedIndex;
-      }
-    },
-    
-    findPreviousUnplanned() {
-      if (!this.meals.length) return;
-      
-      let prevUnplannedIndex = -1;
-      
-      for (let i = this.currentIndex - 1; i >= 0; i--) {
-        const meal = this.meals[i];
-        if (meal.Date && (!meal.Name || meal.Name.trim() === '')) {
-          prevUnplannedIndex = i;
-          break;
+      // Search up to 60 days ahead
+      for (let offset = 1; offset <= 60; offset++) {
+        const nextDate = new Date(start);
+        nextDate.setDate(start.getDate() + offset);
+        const dateString = this.formatDateToString(nextDate);
+        
+        // Check if this date is unplanned (has no meal entry or empty meal name)
+        const mealIndex = this.meals.findIndex(meal => meal.Date === dateString);
+        const isUnplanned = mealIndex === -1 || 
+                           !this.meals[mealIndex].Name || 
+                           this.meals[mealIndex].Name.trim() === '';
+        
+        if (isUnplanned) {
+          console.log("Found unplanned date:", dateString);
+          this.selectDate(dateString);
+          return;
         }
       }
       
-      if (prevUnplannedIndex !== -1) {
-        this.currentIndex = prevUnplannedIndex;
-      }
+      console.log("No unplanned dates found in the next 60 days");
     },
     
+    findPreviousUnplanned() {
+      if (!this.selectedDate) return;
+      const start = new Date(this.selectedDate);
+      start.setHours(0, 0, 0, 0);
+      console.log("Finding previous unplanned from:", this.selectedDate);
+      
+      // Search up to 60 days back
+      for (let offset = 1; offset <= 60; offset++) {
+        const prevDate = new Date(start);
+        prevDate.setDate(start.getDate() - offset);
+        const dateString = this.formatDateToString(prevDate);
+        
+        // Check if this date is unplanned (has no meal entry or empty meal name)
+        const mealIndex = this.meals.findIndex(meal => meal.Date === dateString);
+        const isUnplanned = mealIndex === -1 || 
+                           !this.meals[mealIndex].Name || 
+                           this.meals[mealIndex].Name.trim() === '';
+        
+        if (isUnplanned) {
+          console.log("Found unplanned date:", dateString);
+          this.selectDate(dateString);
+          return;
+        }
+      }
+      
+      console.log("No unplanned dates found in the previous 60 days");
+    },
     formatDate(dateString) {
       if (!dateString) return '';
       const date = new Date(dateString);
       return date.toLocaleDateString();
     },
-    
-    selectDate(dateString) {
-      const selectedIndex = this.meals.findIndex(meal => meal.Date === dateString);
-      if (selectedIndex !== -1) {
-        this.currentIndex = selectedIndex;
-      }
+    formatDateToString(date) {
+      if (!date) return '';
+      return date.toISOString().split('T')[0];
     },
-    
+    selectDate(dateString) {
+      console.log("Selecting date:", dateString);
+      this.selectedDate = dateString;
+      const idx = this.meals.findIndex(meal => meal.Date === dateString);
+      this.currentIndex = idx;
+      console.log("Current index set to:", idx, "for date:", dateString);
+    },
     async suggestMeal() {
       try {
         const recipesResponse = await axios.get('/api/recipes');
