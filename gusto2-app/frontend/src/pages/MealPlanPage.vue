@@ -272,7 +272,18 @@ export default {
     currentMeal() {
       // If selectedDate is set, return the meal for that date, or a virtual meal object
       if (!this.selectedDate) return {};
-      const idx = this.meals.findIndex(meal => meal.Date === this.selectedDate);
+      // Compare yyyy-mm-dd strings directly if possible
+      const idx = this.meals.findIndex(meal => {
+        if (!meal.Date) return false;
+        // Assume meal.Date might have time, extract yyyy-mm-dd part reliably
+        const mealDate = new Date(meal.Date);
+        if (isNaN(mealDate.getTime())) return false; // Handle invalid dates
+        const year = mealDate.getFullYear();
+        const month = String(mealDate.getMonth() + 1).padStart(2, '0');
+        const day = String(mealDate.getDate()).padStart(2, '0');
+        const mealDateString = `${year}-${month}-${day}`;
+        return mealDateString === this.selectedDate;
+      });
       if (idx !== -1) {
         return this.meals[idx];
       }
@@ -286,7 +297,16 @@ export default {
     },
     isCurrentMealChanged() {
       // Only true if there is a meal entry for selectedDate and it's changed
-      const idx = this.meals.findIndex(meal => meal.Date === this.selectedDate);
+      const idx = this.meals.findIndex(meal => {
+        if (!meal.Date) return false;
+        const mealDate = new Date(meal.Date);
+        if (isNaN(mealDate.getTime())) return false;
+        const year = mealDate.getFullYear();
+        const month = String(mealDate.getMonth() + 1).padStart(2, '0');
+        const day = String(mealDate.getDate()).padStart(2, '0');
+        const mealDateString = `${year}-${month}-${day}`;
+        return mealDateString === this.selectedDate;
+      });
       return idx !== -1 && this.changedIndices.includes(idx);
     }
   },
@@ -457,17 +477,13 @@ export default {
     },
     
     initSelectedDate() {
-      // Set selectedDate to today if in range, else first meal date
+      // Always select today on pageload, even if there is no meal for today
       const today = this.formatDateToString(new Date());
+      this.selectedDate = today;
       const idx = this.meals.findIndex(meal => meal.Date === today);
       if (idx !== -1) {
-        this.selectedDate = today;
         this.currentIndex = idx;
-      } else if (this.meals.length > 0) {
-        this.selectedDate = this.meals[0].Date;
-        this.currentIndex = 0;
       } else {
-        this.selectedDate = today;
         this.currentIndex = -1;
       }
     },
@@ -596,13 +612,29 @@ export default {
       return date.toLocaleDateString();
     },
     formatDateToString(date) {
-      if (!date) return '';
-      return date.toISOString().split('T')[0];
+      // Keep this consistent - uses local date parts
+      if (!(date instanceof Date) || isNaN(date.getTime())) {
+        return '';
+      }
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
     },
     selectDate(dateString) {
       console.log("Selecting date:", dateString);
-      this.selectedDate = dateString;
-      const idx = this.meals.findIndex(meal => meal.Date === dateString);
+      this.selectedDate = dateString; // dateString is already yyyy-mm-dd from CalendarPicker
+      // Compare yyyy-mm-dd strings
+      const idx = this.meals.findIndex(meal => {
+        if (!meal.Date) return false;
+        const mealDate = new Date(meal.Date);
+        if (isNaN(mealDate.getTime())) return false;
+        const year = mealDate.getFullYear();
+        const month = String(mealDate.getMonth() + 1).padStart(2, '0');
+        const day = String(mealDate.getDate()).padStart(2, '0');
+        const mealDateString = `${year}-${month}-${day}`;
+        return mealDateString === dateString;
+      });
       this.currentIndex = idx;
       console.log("Current index set to:", idx, "for date:", dateString);
     },

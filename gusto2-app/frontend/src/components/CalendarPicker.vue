@@ -293,17 +293,8 @@ export default {
     },
     selectDate(date) {
       if (date.date) {
-        const matchingMeal = this.meals.find(meal => {
-          if (!meal.Date) return false;
-          const mealDate = new Date(meal.Date);
-          const formattedMealDate = this.formatDateToString(mealDate);
-          return formattedMealDate === date.date;
-        });
-        if (matchingMeal && matchingMeal.Date) {
-          this.$emit('date-selected', matchingMeal.Date);
-        } else {
-          this.$emit('date-selected', date.date);
-        }
+        // Always emit the normalized date string (yyyy-mm-dd)
+        this.$emit('date-selected', date.date);
       }
     },
     isCurrentDay(date) {
